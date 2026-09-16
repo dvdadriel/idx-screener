@@ -32,9 +32,9 @@ class BtcMarketState
       four_hour_change:  four_hour_change&.round(2),
       reason: if blocked
         "BTC dump #{hourly_change&.round(1)}% (1h) / #{four_hour_change&.round(1)}% (4h)"
-      else
+              else
         "BTC stable"
-      end,
+              end,
       checked_at: Time.current
     }
   end

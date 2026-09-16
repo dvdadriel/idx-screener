@@ -68,6 +68,18 @@ jobs:
         if: inputs.task == 'foreign_flow_daily'
         run: bundle exec rake idx:foreign_flow_daily
 
+      # Sekali jalan saat setup: tarik histori aliran dana asing sejauh IDX
+      # menyediakannya (~16 bulan, ~310 ribu baris, belasan menit). Hanya lewat
+      # workflow_dispatch — tak ada jadwalnya, karena backfill kedua tak ada
+      # gunanya setelah foreign_flow_daily jalan setiap hari.
+      - name: foreign_flow_backfill
+        if: inputs.task == 'foreign_flow_backfill'
+        run: bundle exec rake 'idx:foreign_flow_backfill[500]'
+
+      - name: foreign_flow_status
+        if: inputs.task == 'foreign_flow_status'
+        run: bundle exec rake idx:foreign_flow_status
+
       - name: daily_picks
         if: inputs.task == 'daily_picks'
         run: bundle exec rake idx:daily_picks

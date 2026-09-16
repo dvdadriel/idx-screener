@@ -11,7 +11,7 @@ class CreateSignals < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :signals, [:symbol, :fired_at]
+    add_index :signals, [ :symbol, :fired_at ]
     add_index :signals, :alerted
     add_index :signals, :fired_at
   end

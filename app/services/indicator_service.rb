@@ -262,7 +262,7 @@ class IndicatorService
     return [] if values.length < period
 
     k = 2.0 / (period + 1)
-    result = [values.first(period).sum / period]
+    result = [ values.first(period).sum / period ]
 
     values.drop(period).each do |v|
       result << v * k + result.last * (1 - k)

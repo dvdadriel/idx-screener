@@ -28,7 +28,7 @@ class AlertDispatcherJobTest < ActiveSupport::TestCase
   test "ok status sends ai recommendations and marks all alerted" do
     s = buy_signal("BBCA.JK")
     sent = []
-    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) {}) do
+    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) { }) do
     stub_method(TradingViewClient, :rating, ->(**) { {} }) do
     stub_method(AiRecommenderService, :call, ->(*) { { status: :ok, picks: [ { signal: s, reason: "kuat" } ] } }) do
     stub_method(TelegramNotifier, :send_ai_recommendation, ->(sig, label, reason) { sent << [ sig.symbol, label, reason ] }) do
@@ -43,7 +43,7 @@ class AlertDispatcherJobTest < ActiveSupport::TestCase
   test "unavailable status falls back to raw send_signal" do
     s = buy_signal("TLKM.JK")
     sent = []
-    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) {}) do
+    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) { }) do
     stub_method(TradingViewClient, :rating, ->(**) { nil }) do
     stub_method(AiRecommenderService, :call, ->(*) { { status: :unavailable, picks: [] } }) do
     stub_method(TelegramNotifier, :send_signal, ->(sig) { sent << sig.symbol }) do
@@ -58,7 +58,7 @@ class AlertDispatcherJobTest < ActiveSupport::TestCase
     s = buy_signal("ASII.JK")
     ai_sent = []
     raw_sent = []
-    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) {}) do
+    stub_method(AlertDispatcherJob, :broadcast_signal, ->(*) { }) do
     stub_method(TradingViewClient, :rating, ->(**) { {} }) do
     stub_method(AiRecommenderService, :call, ->(*) { { status: :none, picks: [] } }) do
     stub_method(TelegramNotifier, :send_ai_recommendation, ->(*) { ai_sent << 1 }) do

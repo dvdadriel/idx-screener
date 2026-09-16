@@ -53,7 +53,7 @@ class AiRecommenderServiceTest < ActiveSupport::TestCase
   end
 
   test "unavailable for empty input without calling nim" do
-    stub_chat(->{ flunk("nim should not be called") }) do
+    stub_chat(-> { flunk("nim should not be called") }) do
       assert_equal :unavailable, AiRecommenderService.new([]).call[:status]
     end
   end

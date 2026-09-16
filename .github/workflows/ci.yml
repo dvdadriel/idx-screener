@@ -96,6 +96,20 @@ jobs:
         with:
           bundler-cache: true
 
+      - name: Create Supabase-only roles
+        # db/structure.sql memuat GRANT dan CREATE POLICY untuk role `anon`,
+        # role bawaan Supabase yang memberi akses read-only ke dashboard statis.
+        # Postgres polos di CI tak punya role itu, jadi structure_load gagal di
+        # baris pertama policy dan SELURUH job test merah — begitulah CI merah
+        # sejak 2026-08-29 tanpa ada yang benar-benar rusak di aplikasinya.
+        # Membuat rolenya lebih jujur daripada menyaring privilege keluar dari
+        # dump: yang diuji jadi bentuk skema yang sama dengan produksi.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
+            "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; END \$\$;"
+
       - name: Run tests
         env:
           RAILS_ENV: test
@@ -134,6 +148,15 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
+
+      - name: Create Supabase-only roles
+        # Sama seperti di job test: structure.sql memuat policy untuk role `anon`
+        # milik Supabase, yang tak ada di Postgres polos CI.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
+            "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; END \$\$;"
 
       - name: Run System Tests
         env:
