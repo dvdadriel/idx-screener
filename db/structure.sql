@@ -130,7 +130,9 @@ CREATE TABLE public.momentum_snapshots (
     momentum numeric(10,4),
     price numeric(20,8),
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    score integer,
+    eligible_count integer
 );
 
 
@@ -1542,6 +1544,13 @@ CREATE POLICY anon_read_candles ON public.candles FOR SELECT TO anon USING (((as
 
 
 --
+-- Name: momentum_snapshots anon_read_momentum_snapshots; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY anon_read_momentum_snapshots ON public.momentum_snapshots FOR SELECT TO anon USING (true);
+
+
+--
 -- Name: momentum_tracker_summaries anon_read_momentum_tracker_summaries; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1716,6 +1725,13 @@ GRANT SELECT ON TABLE public.latest_candle_closes TO anon;
 
 
 --
+-- Name: TABLE momentum_snapshots; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.momentum_snapshots TO anon;
+
+
+--
 -- Name: TABLE momentum_tracker_summaries; Type: ACL; Schema: public; Owner: -
 --
 
@@ -1750,6 +1766,8 @@ GRANT SELECT ON TABLE public.signals TO anon;
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260916000004'),
+('20260916000003'),
 ('20260916000002'),
 ('20260916000001'),
 ('20260828120200'),

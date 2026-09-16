@@ -45,9 +45,11 @@ class MomentumSnapshotBackfillService
     as_of = date.in_time_zone(IdxMarket::TZ).end_of_day
     Thread.current[:backtest_as_of] = as_of
 
-    picks  = MomentumRankingService.new(as_of: as_of).call
+    svc    = MomentumRankingService.new(as_of: as_of)
+    picks  = svc.call
     regime = picks.empty? && IdxMarketState.long_blocked? ? "risk_off" : "risk_on"
-    MomentumSnapshot.record!(date: date, picks: picks, regime: regime)
+    MomentumSnapshot.record!(date: date, picks: picks, regime: regime,
+                             eligible_count: svc.eligible_count)
 
     Rails.logger.info("[MomentumSnapshotBackfillService] backfilled #{date}: #{regime}, #{picks.size} picks")
     true

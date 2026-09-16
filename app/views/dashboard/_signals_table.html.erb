@@ -1,48 +1,36 @@
-<section class="rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden">
-  <div class="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <h2 class="text-sm font-bold text-white"><%= scope %></h2>
-      <span class="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono uppercase tracking-wider">
-        <%= signals.size %> recent
-      </span>
-    </div>
-    <div class="flex items-center gap-1.5 text-[10px] text-zinc-500">
-      <span class="pulse-dot relative flex h-1.5 w-1.5">
-        <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
-        <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-      </span>
-      <span class="font-mono uppercase tracking-wider">live updates</span>
-    </div>
+<section aria-labelledby="signals-h">
+  <div class="band-head">
+    <h2 id="signals-h" class="band-title">Sinyal terkini</h2>
+    <span class="band-meta"><%= signals.size %> terakhir · stream langsung</span>
   </div>
 
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="text-left text-[10px] text-zinc-500 uppercase tracking-wider border-b border-zinc-800 bg-zinc-950/50">
-          <th class="px-5 py-2.5 font-semibold">Symbol</th>
-          <th class="px-5 py-2.5 font-semibold">Strategy</th>
-          <th class="px-5 py-2.5 font-semibold">Side</th>
-          <th class="px-5 py-2.5 font-semibold">Score</th>
-          <th class="px-5 py-2.5 font-semibold hidden md:table-cell">SL / TP</th>
-          <th class="px-5 py-2.5 font-semibold text-right">Fired</th>
-        </tr>
-      </thead>
-      <tbody id="<%= dom_id %>" class="divide-y divide-zinc-900">
-        <% signals.each do |signal| %>
-          <%= render "dashboard/signal_row", signal: signal %>
-        <% end %>
-        <% if signals.empty? %>
+  <% if signals.any? %>
+    <div class="scroll-x" style="margin-top:12px">
+      <table class="itable">
+        <caption class="sr-only">Sinyal trading terbaru</caption>
+        <thead>
           <tr>
-            <td colspan="6" class="px-5 py-16 text-center">
-              <div class="flex flex-col items-center gap-2">
-                <div class="h-12 w-12 rounded-full bg-zinc-900 flex items-center justify-center text-2xl opacity-50">📡</div>
-                <div class="text-sm text-zinc-500">No signals yet</div>
-                <div class="text-[10px] text-zinc-700 font-mono uppercase tracking-wider">waiting for confluence...</div>
-              </div>
-            </td>
+            <th scope="col">Saham</th>
+            <th scope="col">Strategi</th>
+            <th scope="col">Arah</th>
+            <th scope="col" class="num">Skor</th>
+            <th scope="col" class="num">SL / TP</th>
+            <th scope="col" class="num">Waktu</th>
           </tr>
-        <% end %>
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody id="<%= dom_id %>">
+          <% signals.each { |signal| %><%= render "dashboard/signal_row", signal: signal %><% } %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="empty">
+      <div class="empty-title">Tidak ada sinyal.</div>
+      <p class="t-xs ink-3" style="margin-top:8px">
+        Diam adalah keadaan normal. Strategi per-trade sudah dihapus; yang tersisa adalah
+        peringkat momentum harian, dan itu terbit sebagai snapshot — bukan sebagai sinyal
+        yang menyala sepanjang hari.
+      </p>
+    </div>
+  <% end %>
 </section>

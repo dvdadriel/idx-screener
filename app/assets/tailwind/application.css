@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+/* Design tokens and components live in app/assets/stylesheets/instrument.css,
+   hand-authored and served directly — see the header comment there for why.
+   Tailwind remains only as a generic utility layer for the non-dashboard pages
+   (analysis, idx_universe). Do not re-declare design tokens here; one source of
+   truth is the whole point. */

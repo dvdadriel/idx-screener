@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-16T00:00:00Z",
+  "title": "Design System: IdxScreener",
+  "extensions": {
+    "colorMeta": {
+      "void":    { "role": "neutral", "displayName": "Void",  "canonical": "oklch(0.128 0.008 265)", "tonalRamp": ["oklch(0.10 0.008 265)","oklch(0.128 0.008 265)","oklch(0.163 0.008 265)","oklch(0.196 0.009 265)","oklch(0.285 0.010 265)","oklch(0.395 0.012 265)","oklch(0.55 0.010 265)","oklch(0.75 0.008 265)"] },
+      "read":    { "role": "neutral", "displayName": "Read",  "canonical": "oklch(0.965 0.003 265)", "tonalRamp": ["oklch(0.30 0.005 265)","oklch(0.45 0.005 265)","oklch(0.55 0.006 265)","oklch(0.635 0.010 265)","oklch(0.775 0.008 265)","oklch(0.86 0.005 265)","oklch(0.92 0.004 265)","oklch(0.965 0.003 265)"] },
+      "trace":   { "role": "primary", "displayName": "Calibration Chartreuse", "canonical": "oklch(0.868 0.196 122)", "tonalRamp": ["oklch(0.25 0.07 122)","oklch(0.38 0.11 122)","oklch(0.50 0.15 122)","oklch(0.60 0.18 122)","oklch(0.70 0.19 122)","oklch(0.79 0.20 122)","oklch(0.868 0.196 122)","oklch(0.94 0.13 122)"] },
+      "rise":    { "role": "secondary", "displayName": "Jade Rise", "canonical": "oklch(0.808 0.135 162)", "tonalRamp": ["oklch(0.25 0.05 162)","oklch(0.36 0.07 162)","oklch(0.47 0.09 162)","oklch(0.57 0.11 162)","oklch(0.67 0.125 162)","oklch(0.74 0.13 162)","oklch(0.808 0.135 162)","oklch(0.90 0.09 162)"] },
+      "fall":    { "role": "secondary", "displayName": "Clay Fall", "canonical": "oklch(0.712 0.165 25)", "tonalRamp": ["oklch(0.22 0.07 25)","oklch(0.32 0.10 25)","oklch(0.43 0.13 25)","oklch(0.53 0.15 25)","oklch(0.63 0.16 25)","oklch(0.712 0.165 25)","oklch(0.80 0.14 25)","oklch(0.90 0.08 25)"] },
+      "watch":   { "role": "tertiary", "displayName": "Watch Ochre", "canonical": "oklch(0.808 0.145 78)", "tonalRamp": ["oklch(0.24 0.05 78)","oklch(0.35 0.08 78)","oklch(0.46 0.10 78)","oklch(0.56 0.12 78)","oklch(0.66 0.135 78)","oklch(0.74 0.14 78)","oklch(0.808 0.145 78)","oklch(0.90 0.09 78)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Reading", "purpose": "The value in a rail cell. Largest type on the page; there is no hero." },
+      "label":   { "displayName": "Label",   "purpose": "Reading labels, table headers, evidence text, captions." },
+      "prose":   { "displayName": "Prose",   "purpose": "Explanatory paragraphs only — the one place the proportional face appears." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "ease-out-quint", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Every transition. Exponential ease-out; no bounce, no elastic." },
+      { "name": "state-160", "value": "160ms", "purpose": "Hover and focus transitions on links." },
+      { "name": "trace-in-900", "value": "900ms", "purpose": "Row arrival flash on the Turbo stream. Reports that something changed; the only thing motion says here." }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "30rem" },
+      { "name": "pair",  "value": "40rem" },
+      { "name": "rail",  "value": "52rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Measurement rail cell",
+      "kind": "custom",
+      "refersTo": "reading",
+      "description": "One reading of instrument state: label, value, and the evidence backing it.",
+      "html": "<div class=\"ds-rail\"><div class=\"ds-rail-cell\"><div class=\"ds-reading-label\">Return paper</div><div class=\"ds-reading-value ds-fall\">−5,97%</div><div class=\"ds-reading-note ds-watch\">◐ observasi · uang tidak nyata</div></div><div class=\"ds-rail-cell\"><div class=\"ds-reading-label\">Max drawdown</div><div class=\"ds-reading-value\">−7,52%</div><div class=\"ds-reading-note ds-proven\">● kurva ekuitas harian</div></div></div>",
+      "css": ".ds-rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-block: 1px solid oklch(0.285 0.010 265); font-family: 'IBM Plex Mono', ui-monospace, monospace; } .ds-rail-cell { padding: 14px 16px; } .ds-rail-cell + .ds-rail-cell { border-left: 1px solid oklch(0.285 0.010 265); } .ds-reading-label { font-size: 11px; color: oklch(0.635 0.010 265); } .ds-reading-value { font-size: 22px; line-height: 1.15; font-weight: 500; color: oklch(0.965 0.003 265); font-variant-numeric: tabular-nums; margin-top: 4px; } .ds-reading-note { font-size: 11px; color: oklch(0.635 0.010 265); margin-top: 3px; } .ds-fall { color: oklch(0.712 0.165 25); } .ds-proven { color: oklch(0.808 0.135 162); } .ds-watch { color: oklch(0.808 0.145 78); }"
+    },
+    {
+      "name": "Instrument table",
+      "kind": "custom",
+      "refersTo": "table-row",
+      "description": "Dense ranking table. Rules instead of stripes; figures right-aligned so decimal points form a vertical edge.",
+      "html": "<table class=\"ds-itable\"><thead><tr><th>#</th><th>Saham</th><th class=\"ds-num\">Skor</th><th class=\"ds-num\">Momentum</th><th>Status bukti</th></tr></thead><tbody><tr><td class=\"ds-rank ds-rank-lead\">01</td><td class=\"ds-sym\">BDMN</td><td class=\"ds-num\">100</td><td class=\"ds-num ds-rise\">+63,5%</td><td class=\"ds-watch ds-label\">◐ observasi</td></tr><tr><td class=\"ds-rank\">02</td><td class=\"ds-sym\">MAPI</td><td class=\"ds-num\">98</td><td class=\"ds-num ds-rise\">+21,2%</td><td class=\"ds-watch ds-label\">◐ observasi</td></tr></tbody></table>",
+      "css": ".ds-itable { width: 100%; border-collapse: collapse; font-size: 13px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; } .ds-itable thead th { background: oklch(0.163 0.008 265); color: oklch(0.635 0.010 265); font-weight: 400; font-size: 11px; text-align: left; padding: 7px 12px; border-bottom: 1px solid oklch(0.395 0.012 265); white-space: nowrap; } .ds-itable tbody td { padding: 7px 12px; border-bottom: 1px solid oklch(0.285 0.010 265); color: oklch(0.775 0.008 265); } .ds-itable tbody tr:hover td { background: oklch(0.196 0.009 265); } .ds-itable .ds-num, .ds-itable th.ds-num { text-align: right; color: oklch(0.965 0.003 265); } .ds-itable .ds-sym { color: oklch(0.965 0.003 265); font-weight: 500; } .ds-rank { color: oklch(0.635 0.010 265); width: 2.5rem; } .ds-rank-lead { color: oklch(0.868 0.196 122); } .ds-rise { color: oklch(0.808 0.135 162); } .ds-watch { color: oklch(0.808 0.145 78); } .ds-label { font-size: 11px; }"
+    },
+    {
+      "name": "Regime chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "The regime gate state. Borrows its border from the text colour, so rise/fall needs no extra token.",
+      "html": "<span class=\"ds-chip ds-chip-fall\"><span aria-hidden=\"true\">■</span> RISK-OFF</span> <span class=\"ds-chip ds-chip-rise\"><span aria-hidden=\"true\">▲</span> RISK-ON</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; border: 1px solid currentColor; border-radius: 2px; font-size: 11px; font-family: 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; } .ds-chip-fall { color: oklch(0.712 0.165 25); } .ds-chip-rise { color: oklch(0.808 0.135 162); }"
+    },
+    {
+      "name": "Nav link",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Plain text link; the signal colour appears only on hover and focus.",
+      "html": "<a class=\"ds-nav\" href=\"#\">Deep Scan</a> <a class=\"ds-nav\" href=\"#\">Universe</a>",
+      "css": ".ds-nav { color: oklch(0.635 0.010 265); font-size: 12px; font-family: 'IBM Plex Mono', ui-monospace, monospace; text-decoration: none; padding-block: 4px; margin-right: 16px; border-bottom: 1px solid transparent; transition: color 160ms cubic-bezier(0.22,1,0.36,1), border-color 160ms cubic-bezier(0.22,1,0.36,1); } .ds-nav:hover { color: oklch(0.965 0.003 265); border-bottom-color: oklch(0.868 0.196 122); } .ds-nav:focus-visible { outline: 2px solid oklch(0.868 0.196 122); outline-offset: 2px; }"
+    },
+    {
+      "name": "Evidence marker",
+      "kind": "custom",
+      "refersTo": "reading",
+      "description": "How much a number is worth. The glyph carries the meaning so it survives greyscale and colour deficiency.",
+      "html": "<span class=\"ds-ev ds-ev-proven\">● tervalidasi</span> <span class=\"ds-ev ds-ev-watch\">◐ observasi</span> <span class=\"ds-ev ds-ev-failed\">○ gagal uji</span>",
+      "css": ".ds-ev { font-size: 11px; font-family: 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; margin-right: 16px; } .ds-ev-proven { color: oklch(0.808 0.135 162); } .ds-ev-watch { color: oklch(0.808 0.145 78); } .ds-ev-failed { color: oklch(0.635 0.010 265); }"
+    },
+    {
+      "name": "Empty state",
+      "kind": "card",
+      "refersTo": "table-row",
+      "description": "Names the mechanism and says what would fill it. The cash-day state and the dead-pipeline state must never be rendered interchangeably.",
+      "html": "<div class=\"ds-empty\"><div class=\"ds-empty-title\">Cash — tidak ada peringkat yang direkam hari ini.</div><p class=\"ds-empty-body\">Snapshot 2026-09-16 tercatat sebagai hari risk-off: gate IHSG menahan entry, jadi tak ada top-10 yang dibeli maupun dipantau.</p></div>",
+      "css": ".ds-empty { border: 1px solid oklch(0.285 0.010 265); padding: 32px 16px; font-family: 'IBM Plex Mono', ui-monospace, monospace; } .ds-empty-title { color: oklch(0.965 0.003 265); font-size: 13px; } .ds-empty-body { font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; font-size: 11px; color: oklch(0.635 0.010 265); max-width: 70ch; margin: 8px 0 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Bench Instrument",
+    "overview": "This is not an app that reports on a strategy; it is a device that takes readings of one. A bench instrument has a face, not a home page. It shows a value, the conditions the value was taken under, and how much the value is worth — and it does not editorialise about any of them. The reader is exactly one person, opening it once a day after IDX closes. What they cannot hold in their head is which numbers have earned trust, so the interface carries that instead: every figure is rendered next to its evidence status, in the same visual weight as the figure. Futurism here is carried by precision — tabular figures, hairline rules, one scarce signal colour — not by effects.",
+    "keyCharacteristics": [
+      "Mono-forward: the monospace face runs the interface; the proportional face is reserved for prose",
+      "Tables and hairline rules instead of cards; nothing is boxed that is not genuinely a separate object",
+      "One signal colour, budgeted under 5% of the surface",
+      "Every figure carries an evidence glyph, and every direction carries a sign",
+      "Density over chunking: one expert reader, one screen, once a day"
+    ],
+    "rules": [
+      { "name": "The Scarce Signal Rule", "body": "Calibration Chartreuse covers under 5% of any screen. If a second element wants it, one of them is wrong. Its rarity is the entire reason it means something.", "section": "colors" },
+      { "name": "The Never-Colour-Alone Rule", "body": "No fact may be encoded in hue alone. Direction carries a sign and a glyph; evidence status carries a glyph; regime carries a word. Strip the colour and the page must still be readable.", "section": "colors" },
+      { "name": "The Measured-Not-Assumed Rule", "body": "Every text-on-background pair ships only after its contrast ratio is computed. The palette this replaced used zinc-500/600/700 for labels, measuring 4.12 / 2.57 / 1.91:1 on zinc-950 — two of the three failed AA outright.", "section": "colors" },
+      { "name": "The Numbers-Are-The-Typography Rule", "body": "The type scale spans 11px to 22px, deliberately shallow. Emphasis comes from alignment, tabular figures, and colour budget, not from size. If a value needs to be bigger to be noticed, the layout is wrong.", "section": "typography" },
+      { "name": "The No-Eyebrow Rule", "body": "Section headings are a title and a rule that runs to the edge. No small uppercase tracked kicker above them, ever.", "section": "typography" },
+      { "name": "The Flat Face Rule", "body": "box-shadow is prohibited. If an element needs to separate from its neighbour, give it a 1px rule. If it needs to separate from the page, give it a tonal step. There is no third option.", "section": "elevation" },
+      { "name": "The Glow Audit", "body": "If you find yourself reaching for a coloured blur to make something feel important, the information hierarchy has failed and the blur is covering for it.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do compute the contrast ratio of every new text/background pair before shipping it. AA (4.5:1 body, 3:1 large) is the floor, not the target.",
+      "Do pair every colour-encoded fact with a sign, glyph, or word.",
+      "Do use U+2212 for negative numbers, not a hyphen. It shares the width of a tabular digit.",
+      "Do format numbers Indonesian-style: '.' for thousands, ',' for decimals.",
+      "Do separate peers with a 1px rule and sections with rule-hi.",
+      "Do keep prose under 70ch and set it in Plex Sans. Everything else is Plex Mono.",
+      "Do let motion report a state change and nothing else.",
+      "Do give every animation a prefers-reduced-motion: reduce path."
+    ],
+    "donts": [
+      "Don't use emoji as iconography.",
+      "Don't use gradients or glow: no gradient surfaces, no blurred colour orbs, no box-shadow glows, no gradient wordmark, no background-clip: text.",
+      "Don't put an uppercase tracked eyebrow above every section.",
+      "Don't build uniform card grids, and never a card inside a card.",
+      "Don't reach for neon-on-black cyber terminal or glassmorphism.",
+      "Don't build a hero metric: giant number, small label, supporting stats, accent gradient.",
+      "Don't use a coloured border-left wider than 1px as a decorative stripe.",
+      "Don't spend the signal colour on decoration.",
+      "Don't hide a failed result. Retired strategies stay on screen marked ○."
+    ]
+  }
+}

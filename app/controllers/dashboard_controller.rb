@@ -18,12 +18,8 @@ class DashboardController < ApplicationController
 
     # Momentum (strategi observasi): status forward-tracking + pick snapshot terakhir.
     @momentum = MomentumPaperTracker.new.call
+    # SWING_PICK dihapus bersama IdxScannerService — tak ada lagi @swing_picks.
     @momentum_picks = @momentum[:as_of] ? MomentumSnapshot.for_date(@momentum[:as_of]).picks.order(:rank) : MomentumSnapshot.none
-
-    @swing_picks = TradingSignal.where(strategy: "SWING_PICK", asset_type: "stock")
-                                .where("fired_at >= ?", 24.hours.ago)
-                                .order(Arel.sql("(metadata->>'rank')::int ASC"))
-                                .limit(10)
 
     @stock_stats  = PaperTradeStats.for("stock")
     @stock_open_trades  = PaperTrade.open_trades.where(asset_type: "stock").order(entry_at: :desc).limit(20)

@@ -23,9 +23,11 @@ class MomentumSnapshotJob < ApplicationJob
       return
     end
 
-    picks  = MomentumRankingService.new.call
+    svc    = MomentumRankingService.new
+    picks  = svc.call
     regime = picks.empty? && IdxMarketState.long_blocked? ? "risk_off" : "risk_on"
-    MomentumSnapshot.record!(date: date, picks: picks, regime: regime)
+    MomentumSnapshot.record!(date: date, picks: picks, regime: regime,
+                             eligible_count: svc.eligible_count)
 
     Rails.logger.info("[MomentumSnapshotJob] #{date}: #{regime}, #{picks.size} picks")
   end
