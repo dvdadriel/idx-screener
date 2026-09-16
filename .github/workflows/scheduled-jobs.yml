@@ -64,14 +64,18 @@ jobs:
         if: inputs.task == 'scanner'
         run: bundle exec rake idx:scanner
 
+      # Aliran dana asing TIDAK dijadwalkan dan tidak ada di rantai daily_close:
+      # Cloudflare IDX memblokir IP datacenter. Terbukti 2026-09-16 — run
+      # 35078818617 dapat 403 untuk kelima hari yang dicoba, sementara permintaan
+      # identik dari laptop mengembalikan 963 baris. Step-step ini tetap ada untuk
+      # dicoba manual kalau IDX membuka aksesnya; sekarang keduanya gagal keras
+      # (exit != 0), bukan hijau palsu seperti run pertama itu.
       - name: foreign_flow_daily
         if: inputs.task == 'foreign_flow_daily'
         run: bundle exec rake idx:foreign_flow_daily
 
-      # Sekali jalan saat setup: tarik histori aliran dana asing sejauh IDX
-      # menyediakannya (~16 bulan, ~310 ribu baris, belasan menit). Hanya lewat
-      # workflow_dispatch — tak ada jadwalnya, karena backfill kedua tak ada
-      # gunanya setelah foreign_flow_daily jalan setiap hari.
+      # Backfill histori (~16 bulan, ~310 ribu baris). Jalankan dari laptop,
+      # bukan dari sini — lihat catatan blokir datacenter di atas.
       - name: foreign_flow_backfill
         if: inputs.task == 'foreign_flow_backfill'
         run: bundle exec rake 'idx:foreign_flow_backfill[500]'

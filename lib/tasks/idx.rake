@@ -29,15 +29,22 @@ namespace :idx do
   # Tiap langkah dibungkus rescue: kegagalan aliran dana asing tak boleh membatalkan
   # laporan, dan kegagalan laporan tak boleh membatalkan snapshot (bukti forward
   # tracking). Yang gagal dicatat dan dilaporkan di akhir.
-  desc "Rantai penutupan harian: candle -> aliran asing -> snapshot -> laporan"
+  desc "Rantai penutupan harian: candle -> snapshot -> laporan"
   task daily_close: :environment do
     failures = []
 
+    # Aliran dana asing SENGAJA tidak ada di rantai ini. Ia mustahil berhasil di
+    # GitHub Actions: Cloudflare IDX memblokir IP datacenter (403 untuk semua
+    # hari pada run 35078818617, sementara permintaan identik dari laptop
+    # mengembalikan 963 baris). Menjadwalkannya di sini berarti rantai harian
+    # merah setiap hari karena sebab yang tak bisa diperbaiki — dan alarm yang
+    # selalu berbunyi adalah alarm yang berhenti dibaca. Overlay-nya sendiri juga
+    # tak load-bearing: ia mati secara default karena gagal uji permutasi.
+    # Jalankan `idx:foreign_flow_backfill` dari laptop saat ingin datanya segar.
     {
-      "candle 1d"    => -> { IdxScannerJob.perform_now },
-      "aliran asing" => -> { Rake::Task["idx:foreign_flow_daily"].invoke },
-      "snapshot"     => -> { MomentumSnapshotJob.perform_now; DashboardSummaryMaterializer.new.call },
-      "laporan"      => -> { DailyPickReportJob.perform_now("extended") }
+      "candle 1d" => -> { IdxScannerJob.perform_now },
+      "snapshot"  => -> { MomentumSnapshotJob.perform_now; DashboardSummaryMaterializer.new.call },
+      "laporan"   => -> { DailyPickReportJob.perform_now("extended") }
     }.each do |label, step|
       step.call
       puts "✓ #{label}"
@@ -122,13 +129,30 @@ namespace :idx do
     end
 
     puts "Backfill selesai. Baris masuk: #{ok}. Hari gagal: #{failed}."
-    if ok.zero?
-      puts "GAGAL TOTAL — #{first_error}"
-      puts "idx.co.id memblokir akses otomatis (Cloudflare). Pakai jalur berkas:"
-      puts "  1. Buka https://www.idx.co.id/id/data-pasar/ringkasan-perdagangan/ringkasan-saham/"
-      puts "  2. Unduh Ringkasan Saham per tanggal (CSV/XLSX -> simpan sebagai CSV)"
-      puts "  3. bin/rails 'idx:foreign_flow_ingest[path/berkas.csv]'"
-    end
+    return if ok.positive?
+
+    # Nol baris masuk BUKAN sukses. Versi pertama task ini cuma mencetak
+    # petunjuk lalu keluar dengan status 0 — GitHub Actions melaporkannya hijau
+    # sementara tak satu baris pun terambil (run 35078818617). Itu persis pola
+    # "gagal diam-diam" yang sedang kita berantas di tempat lain.
+    abort <<~PESAN
+      GAGAL TOTAL — #{first_error}
+
+      Kalau ini berjalan di GitHub Actions: memang tak akan pernah berhasil.
+      Cloudflare IDX memblokir IP datacenter. Terbukti 2026-09-16 — permintaan
+      yang sama SUKSES dari laptop (963 baris) dan 403 dari runner Actions.
+
+      Jalankan dari mesin dengan koneksi rumahan, arahkan ke database produksi:
+
+        export DATABASE_URL="<session pooler Supabase>"
+        RAILS_ENV=production bin/rails 'idx:foreign_flow_backfill[500]'
+
+      Kalau dari laptop pun 403, IDX menutup akses otomatis sepenuhnya — pakai
+      jalur berkas:
+        1. Buka https://www.idx.co.id/id/data-pasar/ringkasan-perdagangan/ringkasan-saham/
+        2. Unduh Ringkasan Saham per tanggal, simpan sebagai CSV
+        3. bin/rails 'idx:foreign_flow_ingest[path/berkas.csv]'
+    PESAN
   end
 
   desc "Tarik aliran dana asing hari ini (setelah bursa tutup)"
