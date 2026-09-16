@@ -70,7 +70,13 @@ jobs:
 
     services:
       postgres:
-        image: postgres
+        # Dipin ke 16 dan dipasangkan dengan postgresql-client-16 di bawah.
+        # Dengan `image: postgres` (latest, 18.x) sementara runner membawa client
+        # 16.x, pg_dump MENOLAK jalan ("server version mismatch") — dan
+        # EvidenceBackupServiceTest, yang memang menjalankan pg_dump sungguhan,
+        # gagal untuk ketiga tabel. Kedua sisi harus dipin bersama; menaikkan
+        # salah satunya saja akan mengulang kegagalan yang sama.
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -86,7 +92,7 @@ jobs:
 
     steps:
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev libvips
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev libvips postgresql-client-16
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -118,58 +124,9 @@ jobs:
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test
 
-  system-test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
-
-      # redis:
-      #   image: valkey/valkey:8
-      #   ports:
-      #     - 6379:6379
-      #   options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev libvips
-
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Create Supabase-only roles
-        # Sama seperti di job test: structure.sql memuat policy untuk role `anon`
-        # milik Supabase, yang tak ada di Postgres polos CI.
-        env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
-            "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF; END \$\$;"
-
-      - name: Run System Tests
-        env:
-          RAILS_ENV: test
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432
-          # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test:system
-
-      - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/tmp/screenshots
-          if-no-files-found: ignore
+# Job `system-test` DIHAPUS 2026-09-16. Ia menjalankan `bin/rails test:system`
+# sementara direktori `test/system` tidak pernah ada di repo ini, jadi setiap run
+# mati dengan `cannot load such file -- test/system`. Job yang selalu merah bukan
+# jaring pengaman — ia melatih orang mengabaikan warna CI, dan itulah yang terjadi
+# di sini: CI merah sejak 2026-08-29 tanpa ada yang menengok. Kalau nanti benar-benar
+# ada system test, kembalikan job ini bersama test-nya, jangan sebelum itu.

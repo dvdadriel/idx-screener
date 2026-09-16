@@ -1591,6 +1591,12 @@ ALTER TABLE public.ar_internal_metadata ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.candles ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: foreign_flows; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.foreign_flows ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: momentum_snapshots; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1766,6 +1772,7 @@ GRANT SELECT ON TABLE public.signals TO anon;
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260916000005'),
 ('20260916000004'),
 ('20260916000003'),
 ('20260916000002'),
