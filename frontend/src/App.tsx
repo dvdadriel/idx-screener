@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { isIdxOpenNow } from "./lib/idxMarket";
 import { SignalsTable } from "./components/SignalsTable";
-import { SwingPicks } from "./components/SwingPicks";
-import { MomentumSummary } from "./components/MomentumSummary";
-import { PaperTradeStatsView } from "./components/PaperTradeStatsView";
+import { StateRail } from "./components/StateRail";
+import { RankingTable } from "./components/RankingTable";
+import { PaperEvidence } from "./components/PaperEvidence";
+import { idr } from "./lib/format";
 import type {
   Signal,
   PaperTrade,
   LatestClose,
+  MomentumSnapshot,
   MomentumSummaryData,
   PaperStatsData,
 } from "./types";
@@ -16,31 +18,42 @@ import type {
 interface DashboardState {
   signals: Signal[] | null;
   closes: LatestClose[] | null;
-  swingPicks: Signal[] | null;
+  snapshots: MomentumSnapshot[] | null;
   momentum: MomentumSummaryData | null;
   paperStats: PaperStatsData | null;
   openTrades: PaperTrade[] | null;
 }
 
-const EMPTY_STATE: DashboardState = {
+const EMPTY: DashboardState = {
   signals: null,
   closes: null,
-  swingPicks: null,
+  snapshots: null,
   momentum: null,
   paperStats: null,
   openTrades: null,
 };
 
 export function App() {
-  const [state, setState] = useState<DashboardState>(EMPTY_STATE);
+  const [state, setState] = useState<DashboardState>(EMPTY);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
       try {
-        const [signalsRes, closesRes, swingRes, momentumRes, statsRes, tradesRes] =
+        // Peringkat diambil dua langkah: cari tanggal snapshot terakhir, lalu
+        // ambil barisnya. Satu query "order by date desc limit 10" akan salah —
+        // ia memotong lintas tanggal kalau hari terakhir punya kurang dari 10
+        // baris (hari risk-off hanya punya satu baris marker).
+        const latest = await supabase
+          .from("momentum_snapshots")
+          .select("snapshot_date")
+          .order("snapshot_date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const snapshotDate = latest.error ? null : (latest.data?.snapshot_date ?? null);
+
+        const [signalsRes, closesRes, snapsRes, momentumRes, statsRes, tradesRes] =
           await Promise.all([
             supabase
               .from("signals")
@@ -53,14 +66,13 @@ export function App() {
               .select("*")
               .eq("asset_type", "stock")
               .eq("timeframe", "1d"),
-            supabase
-              .from("signals")
-              .select("*")
-              .eq("strategy", "SWING_PICK")
-              .eq("asset_type", "stock")
-              .gte("fired_at", since24h)
-              .order("fired_at", { ascending: false })
-              .limit(10),
+            snapshotDate
+              ? supabase
+                  .from("momentum_snapshots")
+                  .select("*")
+                  .eq("snapshot_date", snapshotDate)
+                  .order("rank", { ascending: true })
+              : Promise.resolve({ data: [], error: null }),
             supabase.from("momentum_tracker_summaries").select("data").maybeSingle(),
             supabase
               .from("paper_trade_stats_summaries")
@@ -79,7 +91,12 @@ export function App() {
         setState({
           signals: signalsRes.error ? null : (signalsRes.data as Signal[]),
           closes: closesRes.error ? null : (closesRes.data as LatestClose[]),
-          swingPicks: swingRes.error ? null : (swingRes.data as Signal[]),
+          // Baris marker hari risk-off (symbol null) dibuang di sini: ia data
+          // regime, bukan pick. Array kosong tetap beda dari null — "sistem
+          // memilih cash" bukan "query gagal".
+          snapshots: snapsRes.error
+            ? null
+            : ((snapsRes.data ?? []) as MomentumSnapshot[]).filter((r) => r.symbol !== null),
           momentum: momentumRes.error
             ? null
             : ((momentumRes.data?.data as MomentumSummaryData) ?? null),
@@ -89,7 +106,7 @@ export function App() {
           openTrades: tradesRes.error ? null : (tradesRes.data as PaperTrade[]),
         });
       } catch {
-        setState(EMPTY_STATE);
+        setState(EMPTY);
       } finally {
         setLoading(false);
       }
@@ -98,97 +115,151 @@ export function App() {
     load();
   }, []);
 
+  const m = state.momentum;
+  const riskOff = m?.regime_today !== "risk_on";
   const idxOpen = isIdxOpenNow();
-  const stocksScanned = state.closes?.length ?? 0;
+  const covered = state.closes?.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="sticky top-0 z-50 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-sky-500 text-lg font-black text-white shadow-lg shadow-emerald-500/20">
-              ⚡
-            </div>
-            <div>
-              <div className="text-base font-bold tracking-tight text-white">IdxScreener</div>
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                </span>
-                <span className="font-mono uppercase tracking-wider text-emerald-400">live</span>
-              </div>
-            </div>
+    <div className="page">
+      {/* Gate regime menentukan boleh-tidaknya sistem memegang apa pun, jadi ia
+          fakta pertama di halaman dan tetap terlihat saat pembaca menggulir. */}
+      <header className="bar">
+        <div className="shell bar-row">
+          <span className="wordmark">IDXSCREENER</span>
+
+          <div className="bar-regime">
+            <span className="t-xs ink-3">regime</span>
+            {loading ? (
+              <span className="skeleton" style={{ width: 84 }} />
+            ) : (
+              <span className={`chip ${riskOff ? "fall" : "rise"}`}>
+                <span aria-hidden="true">{riskOff ? "■" : "▲"}</span>
+                {riskOff ? "RISK-OFF" : "RISK-ON"}
+              </span>
+            )}
+            <span className="t-xs ink-3 truncate">
+              bursa {idxOpen ? "buka" : "tutup"}
+            </span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
-        {loading ? (
-          <p className="text-sm text-zinc-500">Memuat...</p>
-        ) : (
-          <>
-            {/* ===== HERO ===== */}
-            <div className="grid grid-cols-1 gap-3">
-              <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 text-left">
-                <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-sky-500/5 blur-3xl" />
-                <div className="relative">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="text-2xl">🇮🇩</span>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">
-                      IDX Stocks
-                    </span>
-                    <span
-                      className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        idxOpen ? "bg-emerald-500/20 text-emerald-300" : "bg-zinc-800 text-zinc-400"
-                      }`}
-                    >
-                      {idxOpen ? "● OPEN" : "● CLOSED"}
-                    </span>
-                  </div>
-                  <div className="text-2xl font-bold text-white">
-                    {stocksScanned} <span className="text-sm font-normal text-zinc-500">stocks scanned</span>
-                  </div>
-                  <div className="mt-1 text-xs text-zinc-500">
-                    {state.signals?.length ?? 0} signals · {state.openTrades?.length ?? 0} open trades
-                  </div>
-                </div>
-              </div>
+      <main className="main">
+        <div className="shell stack">
+          <section aria-labelledby="state-h">
+            <div className="band-head">
+              <h2 id="state-h" className="band-title">Portfolio state</h2>
+              <span className="band-meta">
+                {m?.as_of
+                  ? `${m.inception} → ${m.as_of} · ${m.tracked_days} hari-snapshot`
+                  : "belum ada snapshot"}
+              </span>
             </div>
+            {loading ? <RailSkeleton /> : <StateRail data={m} />}
+          </section>
 
-            {/* ===== MOMENTUM ===== */}
-            <section className="rounded-2xl border border-violet-900/40 bg-gradient-to-br from-violet-950/30 to-zinc-950 p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-xl">🚀</span>
-                <h2 className="text-base font-bold text-white">Momentum</h2>
-                <span className="rounded-full bg-violet-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-violet-300">
-                  observasi · paper
-                </span>
-              </div>
-              <MomentumSummary data={state.momentum} />
-            </section>
+          <section aria-labelledby="rank-h">
+            <div className="band-head">
+              <h2 id="rank-h" className="band-title">Peringkat momentum</h2>
+              <span className="band-meta">6 bulan, lewati 1 bulan terakhir</span>
+            </div>
+            {loading ? (
+              <TableSkeleton rows={6} />
+            ) : (
+              <RankingTable
+                picks={state.snapshots}
+                snapshotDate={m?.as_of ?? null}
+                riskOff={riskOff}
+              />
+            )}
+          </section>
 
-            {/* ===== SWING PICKS ===== */}
-            <section className="rounded-2xl border border-sky-900/40 bg-gradient-to-br from-sky-950/30 to-zinc-950 p-6">
-              <div className="mb-5 flex items-center gap-2">
-                <span className="text-2xl">📈</span>
-                <h2 className="text-lg font-bold text-white">Today's Swing Picks</h2>
-              </div>
-              <SwingPicks picks={state.swingPicks} />
-            </section>
+          <section aria-labelledby="paper-h">
+            <div className="band-head">
+              <h2 id="paper-h" className="band-title">Bukti paper trading</h2>
+              <span className="band-meta">
+                {state.paperStats
+                  ? `${idr(state.paperStats.total_closed)} trade tertutup · ${state.paperStats.open_count} terbuka`
+                  : ""}
+              </span>
+            </div>
+            {loading ? (
+              <RailSkeleton />
+            ) : (
+              <PaperEvidence data={state.paperStats} openTrades={state.openTrades} />
+            )}
+          </section>
 
-            {/* ===== PAPER TRADING + OPEN POSITIONS ===== */}
-            <PaperTradeStatsView data={state.paperStats} openTrades={state.openTrades} />
+          <section aria-labelledby="sig-h">
+            <div className="band-head">
+              <h2 id="sig-h" className="band-title">Sinyal terkini</h2>
+              <span className="band-meta">{state.signals?.length ?? 0} terakhir</span>
+            </div>
+            {loading ? <TableSkeleton rows={5} /> : <SignalsTable signals={state.signals} />}
+          </section>
 
-            {/* ===== SIGNALS TABLE ===== */}
-            <SignalsTable signals={state.signals} closes={state.closes} />
-          </>
-        )}
+          <section aria-labelledby="cov-h">
+            <div className="band-head">
+              <h2 id="cov-h" className="band-title">Cakupan data</h2>
+              <span className="band-meta">{idr(covered)} simbol punya candle 1d</span>
+            </div>
+            <div className="tokens" style={{ marginTop: 12 }}>
+              {loading ? (
+                <span className="skeleton" style={{ width: "100%" }} />
+              ) : (
+                (state.closes ?? []).slice(0, 60).map((c) => (
+                  <span key={c.symbol}>
+                    {c.symbol.replace(".JK", "")}{" "}
+                    <span className="ink-3 nums">{idr(c.close)}</span>
+                  </span>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
       </main>
 
-      <footer className="mx-auto max-w-[1600px] px-6 py-8 text-center font-mono text-[10px] uppercase tracking-wider text-zinc-700">
-        idxscreener · paper trading mode · no financial advice
+      <footer className="foot">
+        <div className="shell legend">
+          <span>Paper trading — tidak pernah ada uang sungguhan di sini.</span>
+          <span className="evidence evidence-proven">● tervalidasi</span>
+          <span className="evidence evidence-watch">◐ observasi</span>
+          <span className="evidence evidence-failed">○ gagal uji</span>
+        </div>
       </footer>
+    </div>
+  );
+}
+
+/* Skeleton berbentuk seperti jawabannya, bukan spinner di tengah konten: tata
+   letak tidak melompat saat data mendarat. */
+function RailSkeleton() {
+  return (
+    <div className="rail">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div className="rail-cell" key={i}>
+          <span className="skeleton" style={{ display: "block", width: "60%" }} />
+          <span
+            className="skeleton"
+            style={{ display: "block", width: "45%", height: "1.4lh", marginTop: 6 }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TableSkeleton({ rows }: { rows: number }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      {Array.from({ length: rows }, (_, i) => (
+        <span
+          key={i}
+          className="skeleton"
+          style={{ display: "block", marginTop: i === 0 ? 0 : 8, width: `${95 - i * 6}%` }}
+        />
+      ))}
     </div>
   );
 }

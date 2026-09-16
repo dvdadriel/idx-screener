@@ -1,5 +1,250 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   IdxScreener — "The Bench Instrument"
+   Port of app/assets/stylesheets/instrument.css for the static Vercel build.
+   DESIGN.md at the repo root is the doctrine; values here must match that file
+   exactly. If you change a token, change it in both places or the two surfaces
+   drift apart and DESIGN.md stops being true of either.
+
+   Tailwind is present for layout utilities only. Every colour, every component
+   and every type step comes from below.
+   ========================================================================= */
+
+:root {
+  --void:    oklch(0.128 0.008 265);
+  --well:    oklch(0.163 0.008 265);
+  --panel:   oklch(0.196 0.009 265);
+  --rule:    oklch(0.285 0.010 265);
+  --rule-hi: oklch(0.395 0.012 265);
+
+  /* 18.2 / 9.9 / 5.9 : 1 against --void — measured, not assumed */
+  --read:    oklch(0.965 0.003 265);
+  --read-2:  oklch(0.775 0.008 265);
+  --read-3:  oklch(0.635 0.010 265);
+
+  /* Signal, budgeted under 5% of the surface */
+  --trace:   oklch(0.868 0.196 122);
+
+  --rise:    oklch(0.808 0.135 162);
+  --fall:    oklch(0.712 0.165 25);
+
+  --proven:  oklch(0.808 0.135 162);
+  --watch:   oklch(0.808 0.145 78);
+  --failed:  oklch(0.635 0.010 265);
+
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --edge: 2px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bar-h: 53px;
+
+  color-scheme: dark;
+}
+
+/* Components are layered; utilities are not. An unlayered rule outranks any
+   layered rule regardless of specificity — without this, `.reading-value` beat
+   `.fall` and every directional colour rendered plain white. */
+@layer components;
+
+/* --- base ---------------------------------------------------------------- */
+
+html { background: var(--void); }
+
 body {
-  @apply bg-zinc-950 text-zinc-200;
+  margin: 0;
+  background: var(--void);
+  color: var(--read-2);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+p { font-family: var(--sans); max-width: 70ch; }
+a { color: inherit; text-decoration: none; }
+table { border-collapse: collapse; }
+
+:focus-visible {
+  outline: 2px solid var(--trace);
+  outline-offset: 2px;
+  border-radius: var(--edge);
+}
+
+::selection { background: var(--trace); color: var(--void); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+@layer components {
+
+  /* --- shell ------------------------------------------------------------- */
+
+  .page { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .shell { width: 100%; max-width: 1400px; margin-inline: auto; padding-inline: 16px; }
+  @media (min-width: 40rem) { .shell { padding-inline: 24px; } }
+
+  .bar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: color-mix(in oklch, var(--void) 94%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--rule-hi);
+  }
+
+  .bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding-block: 12px; }
+  .wordmark { color: var(--read); font-weight: 600; letter-spacing: -0.01em; font-size: 14px; }
+
+  .bar-regime { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  @media (min-width: 40rem) { .bar-regime { margin-left: auto; } }
+  @media (max-width: 39.99rem) { .bar-regime { order: 99; width: 100%; } }
+
+  .main { flex: 1; padding-block: 24px 32px; }
+  @media (min-width: 40rem) { .main { padding-block: 32px 40px; } }
+
+  .stack > * + * { margin-top: 40px; }
+  .stack > section { scroll-margin-top: calc(var(--bar-h) + 12px); }
+
+  /* --- section heading --------------------------------------------------- */
+
+  .band-head {
+    display: flex; align-items: baseline; flex-wrap: wrap;
+    gap: 4px 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule-hi);
+  }
+  .band-title { color: var(--read); font-size: 13px; font-weight: 500; margin: 0; }
+  .band-meta  { color: var(--read-3); font-size: 11px; margin-left: auto; }
+
+  /* --- measurement rail --------------------------------------------------
+     Readings divided by hairlines, not boxed into cards: they are facets of one
+     instrument state, not independent objects. */
+
+  .rail { display: grid; border-block: 1px solid var(--rule); }
+  .rail-cell { padding: 14px 16px; min-width: 0; }
+
+  @media (min-width: 52rem) {
+    .rail { grid-auto-flow: column; grid-auto-columns: 1fr; }
+    .rail > * + .rail-cell { border-left: 1px solid var(--rule); }
+  }
+  @media (min-width: 30rem) and (max-width: 51.99rem) {
+    .rail { grid-template-columns: 1fr 1fr; }
+    .rail-cell { border-top: 1px solid var(--rule); }
+    .rail-cell:nth-child(2n) { border-left: 1px solid var(--rule); }
+    .rail-cell:nth-child(-n+2) { border-top: 0; }
+  }
+  @media (max-width: 29.99rem) {
+    .rail-cell + .rail-cell { border-top: 1px solid var(--rule); }
+  }
+
+  .reading-label { font-size: 11px; color: var(--read-3); }
+  .reading-value {
+    font-size: 22px; line-height: 1.15; font-weight: 500;
+    color: var(--read); font-variant-numeric: tabular-nums; margin-top: 4px;
+  }
+  .reading-note { font-size: 11px; color: var(--read-3); margin-top: 3px; }
+
+  /* --- evidence ---------------------------------------------------------- */
+
+  .evidence { font-size: 11px; white-space: nowrap; }
+  /* Di dalam rail, catatan bukti boleh membungkus: sebuah keterangan kegagalan
+     bisa lebih panjang dari label pendek, dan nowrap membuatnya meluber ke sel
+     tetangga (terlihat saat penanda drawdown-mustahil ditambahkan). Di luar
+     rail — legenda footer, sel tabel — nowrap tetap benar. */
+  .reading-note.evidence { white-space: normal; }
+  .evidence-proven { color: var(--proven); }
+  .evidence-watch  { color: var(--watch); }
+  .evidence-failed { color: var(--failed); }
+
+  /* --- table -------------------------------------------------------------
+     `top: 0` and not an offset: .scroll-x is a scroll container (overflow-x
+     forces overflow-y to auto), so any offset pushes the header down INSIDE
+     the box and it renders below its own first row. */
+
+  .itable { width: 100%; font-size: 13px; }
+
+  .itable thead th {
+    position: sticky; top: 0;
+    background: var(--well); color: var(--read-3);
+    font-weight: 400; font-size: 11px; text-align: left;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rule-hi);
+    white-space: nowrap;
+  }
+
+  .itable tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--read-2);
+    vertical-align: baseline;
+  }
+
+  .itable tbody tr:hover td { background: var(--panel); }
+  .itable .num, .itable th.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--read); }
+  .itable .sym { color: var(--read); font-weight: 500; white-space: nowrap; }
+
+  .rank { color: var(--read-3); font-variant-numeric: tabular-nums; width: 2.5rem; }
+  .rank-lead { color: var(--trace); }
+
+  .scroll-x { overflow-x: auto; }
+
+  /* --- small parts -------------------------------------------------------- */
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 7px; border: 1px solid currentColor;
+    border-radius: var(--edge); font-size: 11px; white-space: nowrap;
+  }
+
+  .note {
+    border-left: 1px solid var(--fall);
+    padding: 4px 0 4px 12px;
+    font-size: 11px; color: var(--read-2); margin-top: 12px;
+  }
+
+  .empty { border: 1px solid var(--rule); padding: 32px 16px; margin-top: 12px; }
+  .empty-title { color: var(--read); font-size: 13px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 11px; color: var(--read-3); }
+  .foot { border-top: 1px solid var(--rule); margin-top: auto; padding-block: 16px; }
+
+  .tokens { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; }
+
+  /* Skeleton, not a spinner: the shape of the answer appears before the answer,
+     so the page does not jump when data lands. */
+  .skeleton {
+    background: var(--panel);
+    height: 1lh;
+    animation: pulse 1400ms var(--ease) infinite;
+  }
+
+} /* @layer components */
+
+/* --- utilities (unlayered: always win) ------------------------------------ */
+
+.t-xs   { font-size: 11px; }
+.ink    { color: var(--read); }
+.ink-2  { color: var(--read-2); }
+.ink-3  { color: var(--read-3); }
+.rise   { color: var(--rise); }
+.fall   { color: var(--fall); }
+.trace  { color: var(--trace); }
+.nums   { font-variant-numeric: tabular-nums; }
+.measure { max-width: 70ch; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@keyframes pulse { 50% { opacity: 0.45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

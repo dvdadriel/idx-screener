@@ -25,6 +25,22 @@ export interface PaperTrade {
   symbol: string;
 }
 
+/** Satu baris momentum_snapshots. Hari risk-off direkam sebagai marker tanpa
+ *  simbol (symbol/rank null), jadi "tak ada pick" BUKAN berarti "tak ada
+ *  snapshot" — membedakan keduanya adalah beda antara "sistem memilih cash" dan
+ *  "pipeline mati". */
+export interface MomentumSnapshot {
+  id: number;
+  snapshot_date: string;
+  regime: string;
+  rank: number | null;
+  symbol: string | null;
+  momentum: number | null;
+  price: number | null;
+  score: number | null;
+  eligible_count: number | null;
+}
+
 export interface LatestClose {
   symbol: string;
   timeframe: string;
