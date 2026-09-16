@@ -103,10 +103,10 @@ ALTER SEQUENCE public.foreign_flows_id_seq OWNED BY public.foreign_flows.id;
 
 
 --
--- Name: latest_candle_closes; Type: VIEW; Schema: public; Owner: -
+-- Name: latest_candle_closes; Type: MATERIALIZED VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.latest_candle_closes AS
+CREATE MATERIALIZED VIEW public.latest_candle_closes AS
  SELECT DISTINCT ON (candles.symbol, candles.timeframe, candles.asset_type) candles.symbol,
     candles.timeframe,
     candles.asset_type,
@@ -114,7 +114,8 @@ CREATE VIEW public.latest_candle_closes AS
     candles.opened_at
    FROM public.candles
   WHERE ((candles.asset_type)::text = 'stock'::text)
-  ORDER BY candles.symbol, candles.timeframe, candles.asset_type, candles.opened_at DESC;
+  ORDER BY candles.symbol, candles.timeframe, candles.asset_type, candles.opened_at DESC
+  WITH NO DATA;
 
 
 --
@@ -1117,6 +1118,13 @@ ALTER TABLE ONLY public.solid_queue_semaphores
 
 
 --
+-- Name: index_candles_latest_close_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_candles_latest_close_lookup ON public.candles USING btree (asset_type, timeframe, symbol, opened_at DESC) WHERE ((asset_type)::text = 'stock'::text);
+
+
+--
 -- Name: index_candles_on_asset_type; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1149,6 +1157,13 @@ CREATE UNIQUE INDEX index_foreign_flows_on_symbol_and_traded_on ON public.foreig
 --
 
 CREATE INDEX index_foreign_flows_on_traded_on ON public.foreign_flows USING btree (traded_on);
+
+
+--
+-- Name: index_latest_candle_closes_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_latest_candle_closes_key ON public.latest_candle_closes USING btree (symbol, timeframe, asset_type);
 
 
 --
@@ -1772,6 +1787,8 @@ GRANT SELECT ON TABLE public.signals TO anon;
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260916000007'),
+('20260916000006'),
 ('20260916000005'),
 ('20260916000004'),
 ('20260916000003'),

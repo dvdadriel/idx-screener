@@ -26,8 +26,13 @@ class StructureSqlTest < ActiveSupport::TestCase
     end
   end
 
-  test "latest_candle_closes view filters to stock" do
-    assert_match(/CREATE VIEW public\.latest_candle_closes/, @sql)
+  # Sejak 20260916000007 ini MATERIALIZED view: versi biasa memindai 577 ribu
+  # candle tiap kunjungan dashboard dan melewati statement_timeout anon di
+  # Supabase. Index uniknya bukan hiasan — tanpa itu REFRESH CONCURRENTLY ditolak
+  # dan refresh biasa mengunci view, membuat dashboard blank saat rantai harian jalan.
+  test "latest_candle_closes adalah materialized view, difilter ke stock, dan punya index unik" do
+    assert_match(/CREATE MATERIALIZED VIEW public\.latest_candle_closes/, @sql)
     assert_match(/WHERE.*\(\(candles\.asset_type\).*=.*'stock'/, @sql)
+    assert_match(/CREATE UNIQUE INDEX index_latest_candle_closes_key/, @sql)
   end
 end

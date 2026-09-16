@@ -9,9 +9,43 @@ class DashboardSummaryMaterializer
   def call
     materialize_momentum
     ASSET_TYPES.each { |t| materialize_paper_stats(t) }
+    refresh_latest_closes
   end
 
   private
+
+  # latest_candle_closes adalah MATERIALIZED view (migrasi 20260916000007): versi
+  # biasa memindai 577 ribu candle pada tiap kunjungan dashboard dan melewati
+  # statement_timeout role anon di Supabase. Ia di-refresh di sini karena kelas
+  # ini sudah menjadi langkah "snapshot" pada rantai idx:daily_close, tepat
+  # setelah candle hari itu masuk.
+  #
+  # CONCURRENTLY supaya dashboard tidak blank selama refresh; ia butuh index unik,
+  # yang dibuat oleh migrasi yang sama. Kegagalan di sini TIDAK boleh menjatuhkan
+  # materialisasi momentum & paper stats yang sudah selesai di atasnya — cakupan
+  # data basi jauh lebih ringan akibatnya daripada ekuitas yang tak ter-update.
+  def refresh_latest_closes
+    # REFRESH ... CONCURRENTLY DILARANG di dalam blok transaksi oleh Postgres, dan
+    # `rescue` tidak menolong: begitu statement-nya ditolak, seluruh transaksi
+    # jadi aborted dan setiap perintah berikutnya gagal dengan
+    # PG::InFailedSqlTransaction. Ditemukan lewat 4 test yang tiba-tiba error
+    # berantai, bukan lewat teori.
+    #
+    # Jalur produksi (rake idx:daily_close) tidak bertransaksi, jadi refresh jalan
+    # normal di sana. Test membungkus tiap case dalam transaksi, jadi dilewati —
+    # dan kalau suatu saat ada pemanggil produksi yang membungkusnya, baris log ini
+    # yang akan memberitahu, bukan kegagalan senyap.
+    if ActiveRecord::Base.connection.open_transactions.positive?
+      Rails.logger.info("[DashboardSummaryMaterializer] lewati REFRESH latest_candle_closes — sedang di dalam transaksi")
+      return
+    end
+
+    ActiveRecord::Base.connection.execute(
+      "REFRESH MATERIALIZED VIEW CONCURRENTLY public.latest_candle_closes"
+    )
+  rescue => e
+    Rails.logger.error("[DashboardSummaryMaterializer] refresh latest_candle_closes: #{e.class}: #{e.message}")
+  end
 
   def materialize_momentum
     data = MomentumPaperTracker.new.call
