@@ -35,7 +35,8 @@ class AlertDispatcherJobTest < ActiveSupport::TestCase
       AlertDispatcherJob.new.perform
     end end end end
 
-    assert_equal [ [ "BBCA.JK", "Squeeze Breakout", "kuat" ] ], sent
+    # SetupLabeler dihapus bersama confluence/squeeze — label kini nama strategi apa adanya.
+    assert_equal [ [ "BBCA.JK", "SQUEEZE_BREAKOUT", "kuat" ] ], sent
     assert s.reload.alerted?
   end
 

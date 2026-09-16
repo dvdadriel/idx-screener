@@ -44,25 +44,51 @@ class PaperTradeStatsTest < ActiveSupport::TestCase
     assert_equal 0.0, stats[:avg_pnl]
   end
 
-  # exit order [+10, -6, +4] → equity 10, 4, 8. Peak 10, trough 4 → max DD 6.
   def make_closed_with_exit(pnl:, exit_at:)
     t = make_trade(asset_type: "stock", pnl: pnl)
     t.update!(exit_at: exit_at)
     t
   end
 
+  # Drawdown = kurva ekuitas HARIAN ber-compound (satu hari = satu periode), bukan
+  # penjumlahan pnl_pct per trade. Tiga hari berbeda [+10, -6, +4]:
+  #   equity 1.10 -> 1.034 -> 1.0754 ; puncak 1.10, lembah 1.034 -> DD 6.0%
   test "computes profit factor, max drawdown, sharpe over closed trades" do
-    base = Time.current
+    base = Time.current.beginning_of_day
     make_closed_with_exit(pnl: 10, exit_at: base)
-    make_closed_with_exit(pnl: -6, exit_at: base + 1.minute)
-    make_closed_with_exit(pnl: 4,  exit_at: base + 2.minutes)
+    make_closed_with_exit(pnl: -6, exit_at: base + 1.day)
+    make_closed_with_exit(pnl: 4,  exit_at: base + 2.days)
 
     stats = PaperTradeStats.for("stock")
 
     assert_in_delta 2.33, stats[:profit_factor], 0.01   # (10+4)/6
-    assert_in_delta 6.0,  stats[:max_drawdown], 0.01    # peak 10 → trough 4
+    assert_in_delta 6.0,  stats[:max_drawdown], 0.01    # (1.10 - 1.034)/1.10
     assert_in_delta 0.40, stats[:sharpe], 0.02          # mean 2.67 / std 6.60
     assert_in_delta 2.67, stats[:expectancy], 0.01      # = avg_pnl
+  end
+
+  # Inti perbaikan: posisi yang berjalan BERSAMAAN tidak boleh di-compound seolah
+  # antre. Tiga trade yang tutup di hari yang sama = satu periode portofolio
+  # (rata-rata +2,67%), jadi tak ada penurunan sama sekali. Versi lama menjumlahkan
+  # pnl_pct dan melaporkan DD 6% dari hari yang bahkan berakhir untung.
+  test "trade yang tutup di hari sama dirata-rata, bukan di-compound berurutan" do
+    base = Time.current.beginning_of_day
+    make_closed_with_exit(pnl: 10, exit_at: base)
+    make_closed_with_exit(pnl: -6, exit_at: base + 1.minute)
+    make_closed_with_exit(pnl: 4,  exit_at: base + 2.minutes)
+
+    assert_in_delta 0.0, PaperTradeStats.for("stock")[:max_drawdown], 0.01
+  end
+
+  # Drawdown harus punya batas bawah -100%: bug lama (cum += pnl_pct) melaporkan
+  # -4152% di dashboard karena menjumlahkan poin persen ribuan trade.
+  test "drawdown tak pernah melewati 100% walau ratusan hari rugi beruntun" do
+    base = Time.current.beginning_of_day - 400.days
+    300.times { |i| make_closed_with_exit(pnl: -5, exit_at: base + i.days) }
+
+    dd = PaperTradeStats.for("stock")[:max_drawdown]
+    assert_operator dd, :<=, 100.0
+    assert_operator dd, :>, 99.0   # -5%/hari selama 300 hari memang nyaris habis
   end
 
   test "profit factor nil when no losing trades" do

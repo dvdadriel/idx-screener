@@ -65,6 +65,44 @@ ALTER SEQUENCE public.candles_id_seq OWNED BY public.candles.id;
 
 
 --
+-- Name: foreign_flows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.foreign_flows (
+    id bigint NOT NULL,
+    symbol character varying NOT NULL,
+    traded_on date NOT NULL,
+    foreign_buy numeric(22,2),
+    foreign_sell numeric(22,2),
+    foreign_net numeric(22,2) NOT NULL,
+    turnover numeric(22,2),
+    source character varying DEFAULT 'idx'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    volume numeric(22,2)
+);
+
+
+--
+-- Name: foreign_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.foreign_flows_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: foreign_flows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.foreign_flows_id_seq OWNED BY public.foreign_flows.id;
+
+
+--
 -- Name: latest_candle_closes; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -753,6 +791,13 @@ ALTER TABLE ONLY public.candles ALTER COLUMN id SET DEFAULT nextval('public.cand
 
 
 --
+-- Name: foreign_flows id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.foreign_flows ALTER COLUMN id SET DEFAULT nextval('public.foreign_flows_id_seq'::regclass);
+
+
+--
 -- Name: momentum_snapshots id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -899,6 +944,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.candles
     ADD CONSTRAINT candles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: foreign_flows foreign_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.foreign_flows
+    ADD CONSTRAINT foreign_flows_pkey PRIMARY KEY (id);
 
 
 --
@@ -1080,6 +1133,20 @@ CREATE INDEX index_candles_on_symbol_and_timeframe ON public.candles USING btree
 --
 
 CREATE UNIQUE INDEX index_candles_on_symbol_timeframe_opened_at ON public.candles USING btree (symbol, timeframe, opened_at);
+
+
+--
+-- Name: index_foreign_flows_on_symbol_and_traded_on; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_foreign_flows_on_symbol_and_traded_on ON public.foreign_flows USING btree (symbol, traded_on);
+
+
+--
+-- Name: index_foreign_flows_on_traded_on; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_foreign_flows_on_traded_on ON public.foreign_flows USING btree (traded_on);
 
 
 --
@@ -1683,6 +1750,8 @@ GRANT SELECT ON TABLE public.signals TO anon;
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260916000002'),
+('20260916000001'),
 ('20260828120200'),
 ('20260828120100'),
 ('20260828120000'),

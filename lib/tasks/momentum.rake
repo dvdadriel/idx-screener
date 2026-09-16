@@ -19,7 +19,7 @@ namespace :momentum do
     else
       puts "⚠️  WATCHLIST informasional — regime risk-off, JANGAN beli dulu:" if blocked && watch
       puts "Top #{picks.size} momentum (dari #{syms.size} simbol):"
-      picks.each_with_index { |p, i| printf("%2d. %-10s mom=%+.1f%%  Rp %d\n", i + 1, p[:symbol].sub('.JK', ''), p[:momentum] * 100, p[:last_close]) }
+      picks.each_with_index { |p, i| printf("%2d. %-10s mom=%+.1f%%  Rp %d\n", i + 1, p[:symbol].sub(".JK", ""), p[:momentum] * 100, p[:last_close]) }
     end
   end
 
@@ -64,6 +64,63 @@ namespace :momentum do
                r[:total_return], r[:alpha] || 0.0, r[:max_drawdown], r[:sharpe] || "-")
       end
       puts
+    end
+  end
+end
+
+namespace :momentum do
+  desc "Uji hipotesis smart money: momentum polos vs momentum + filter aliran dana asing"
+  task :flow_test, [ :days, :universe, :buffer ] => :environment do |_t, args|
+    days    = (args[:days] || 365).to_i
+    buffer  = (args[:buffer] || 0).to_i
+    symbols = case args[:universe].to_s
+    when "all"      then IdxUniverseService.all
+    when "lq45"     then IdxMarket::WATCHLIST
+    else                 IdxMarket::EXTENDED_WATCHLIST
+    end
+
+    # Universe uji = simbol yang punya KEDUA datanya. Dua penyaringan berbeda:
+    #
+    #  1. cakupan flow — tanpa ini, filter "menang/kalah" hanya karena datanya
+    #     bolong, bukan karena hipotesisnya benar.
+    #  2. cakupan candle — saham suspend/delisting (WSKT, SCBD, RMBA, MFIN dst)
+    #     tak punya histori Yahoo sama sekali. Ranking memang membuangnya diam-diam,
+    #     tapi check_coverage! (ambang 2%) menolak jalan selama mereka ada di
+    #     universe. Dikeluarkan di sini SECARA SADAR dan dilaporkan jumlahnya —
+    #     bukan dengan melonggarkan kembali guard-nya.
+    need = MomentumRankingService::LOOKBACK + MomentumRankingService::SKIP + 1
+    candle_counts = Candle.where(asset_type: "stock", timeframe: "1d", symbol: symbols)
+                          .group(:symbol).count
+    flow_counts   = ForeignFlow.where(symbol: symbols).group(:symbol).count
+
+    covered = symbols.select { |s| (candle_counts[s] || 0) >= need && (flow_counts[s] || 0) >= 40 }
+    dropped = symbols - covered
+
+    puts "Universe: #{symbols.size} simbol -> layak uji: #{covered.size} (dibuang #{dropped.size})"
+    puts "  dibuang (candle < #{need}): #{symbols.count { |s| (candle_counts[s] || 0) < need }}"
+    puts "  dibuang (flow < 40 hari):   #{symbols.count { |s| (flow_counts[s] || 0) < 40 }}"
+    puts "Rentang data asing: #{ForeignFlow.minimum(:traded_on)} .. #{ForeignFlow.maximum(:traded_on)}"
+    puts "Candle 1d terakhir: #{Candle.where(asset_type: %q(stock), timeframe: %q(1d)).maximum(:opened_at)&.to_date}"
+    puts
+
+    variants = {
+      "momentum polos"        => nil,
+      "flow >= 0 (net beli)"  => 0.0,
+      "flow >= 0.02"          => 0.02,
+      "flow >= 0.05"          => 0.05
+    }
+
+    printf("%-24s %10s %10s %10s %8s %8s\n", "varian", "return", "alpha", "maxDD", "sharpe", "cash%")
+    puts "-" * 74
+    variants.each do |label, threshold|
+      r = MomentumBacktestService.new(
+        symbols: covered, days: days, buffer_n: buffer, min_flow_ratio: threshold
+      ).call
+      printf("%-24s %9.2f%% %9.2f%% %9.2f%% %8s %7.0f%%\n",
+             label, r[:total_return], r[:alpha] || 0, r[:max_drawdown],
+             r[:sharpe] || "-", r[:periods].zero? ? 0 : r[:cash_periods].to_f / r[:periods] * 100)
+    rescue => e
+      printf("%-24s GAGAL: %s\n", label, e.message[0, 90])
     end
   end
 end

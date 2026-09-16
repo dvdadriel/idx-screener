@@ -6,14 +6,12 @@ class AlertDispatcherJob < ApplicationJob
   # most users are spot-only). If the AI is unavailable we fall back to raw BUY alerts.
   def perform
     TradingSignal.unalerted.high_score.group_by(&:asset_type).each do |asset_type, signals|
-      buys = signals.select { |s| s.signal_type == "BUY" }
-      # CONFLUENCE dibungkam: backtest tunjukkan tak ada edge (rugi OOS). Tetap di-finalize
-      # → paper-trade diam sebagai baseline, tapi jangan kirim alert Telegram.
-      # Crypto juga dimatikan (kecuali CRYPTO_ENABLED).
-      alertable = buys.reject { |s| s.strategy.to_s.start_with?("CONFLUENCE") }
+      # Crypto dimatikan kecuali CRYPTO_ENABLED. Strategi per-trade (confluence,
+      # squeeze, swing pick) sudah dihapus — sisa BUY hanya dari jalur momentum.
+      alertable = signals.select { |s| s.signal_type == "BUY" }
       alertable = [] if TelegramCommandService.alerts_muted?   # /mute via bot; sinyal tetap di-finalize
       send_recommendations(asset_type, alertable) if alertable.any? && (asset_type != "crypto" || CRYPTO_ENABLED)
-      signals.each { |s| finalize(s) } # includes SELL & confluence, so they don't linger unalerted
+      signals.each { |s| finalize(s) } # termasuk SELL, supaya tak menggantung unalerted
     end
   end
 
@@ -28,7 +26,7 @@ class AlertDispatcherJob < ApplicationJob
     when :ok
       result[:picks].each do |pick|
         signal = pick[:signal]
-        notifier.send_ai_recommendation(signal, SetupLabeler.label(signal), pick[:reason])
+        notifier.send_ai_recommendation(signal, signal.strategy, pick[:reason])
       end
     when :unavailable
       buys.each { |s| notifier.send_signal(s) } # degrade to prior behavior

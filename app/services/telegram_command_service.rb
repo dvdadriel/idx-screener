@@ -65,7 +65,7 @@ class TelegramCommandService
     reply(chat_id, dispatch(text))
   end
 
-  # Satu format daftar ranking untuk /rank manual maupun RankReportJob — jangan
+  # Satu format daftar ranking untuk /rank manual — jangan
   # duplikasi teksnya di dua tempat.
   def self.format_rank(picks, blocked)
     header = if blocked

@@ -213,6 +213,34 @@ class IndicatorService
     end
   end
 
+  # Level entry/SL/TP berbasis ATR. Pindahan dari SignalConfluenceService yang
+  # dihapus: levelnya sendiri tak pernah jadi masalah (yang tak punya edge adalah
+  # cara service itu MEMILIH sinyal), dan kartu pick momentum tetap membutuhkannya.
+  #   SL = 1,5x ATR, TP = 3x ATR  => R:R 1:2
+  #   fallback tanpa ATR: SL 3%, TP 6% (rasio sama)
+  def atr_levels(side = "BUY", period: 14)
+    entry = last_close
+    return {} if entry.nil? || entry.zero?
+
+    a = atr(period: period)
+    sl_dist, tp_dist, source = if a && a.positive?
+      [ a * 1.5, a * 3.0, "atr" ]
+    else
+      [ entry * 0.03, entry * 0.06, "pct" ]
+    end
+
+    sl, tp = side == "BUY" ? [ entry - sl_dist, entry + tp_dist ] : [ entry + sl_dist, entry - tp_dist ]
+    sl_pct = ((sl - entry) / entry * 100).round(2)
+    tp_pct = ((tp - entry) / entry * 100).round(2)
+
+    {
+      entry_price: entry.round(8), sl_price: sl.round(8), tp_price: tp.round(8),
+      sl_pct: sl_pct, tp_pct: tp_pct,
+      risk_reward: sl_pct.zero? ? nil : (tp_pct.abs / sl_pct.abs).round(2),
+      level_source: source
+    }
+  end
+
   def bollinger(period: 20, std_dev: 2)
     return nil if @closes.length < period
 

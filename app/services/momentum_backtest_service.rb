@@ -1,4 +1,5 @@
-# Backtester PORTOFOLIO untuk strategi momentum (beda dari BacktestService yg per-trade).
+# Backtester PORTOFOLIO untuk strategi momentum — satu-satunya backtester yang
+# tersisa setelah strategi per-trade (confluence/squeeze/swing) dihapus.
 # Simulasi rebalance bulanan: tiap ~21 hari bursa, mark-to-market holding, ranking
 # ulang as-of, ganti ke top-N (equal weight), potong biaya turnover. Equity ber-compound
 # → return & max drawdown akun NYATA. Regime as-of ditangani MomentumRankingService.
@@ -14,7 +15,8 @@ class MomentumBacktestService
                  lookback: MomentumRankingService::LOOKBACK, skip: MomentumRankingService::SKIP,
                  cost_pct: 0.4, rebalance_days: REBALANCE_DAYS,
                  max_momentum: MomentumRankingService::MAX_MOMENTUM, min_price: MomentumRankingService::MIN_PRICE,
-                 max_extension: nil, regime_confirm_days: 0, buffer_n: nil, residual: false)
+                 max_extension: nil, regime_confirm_days: 0, buffer_n: nil, residual: false,
+                 min_flow_ratio: nil, max_flow_ratio: nil)
     @symbols   = Array(symbols)
     @days      = days.to_i
     @offset    = offset_days.to_i
@@ -32,6 +34,8 @@ class MomentumBacktestService
     @buffer_n = buffer_n.to_i
     @buffer_n = 0 if @buffer_n <= @top_n
     @residual = residual   # ranking pakai momentum residual (beta-adjusted) vs return mentah
+    @min_flow_ratio = min_flow_ratio   # overlay smart money (nil = mati)
+    @max_flow_ratio = max_flow_ratio   # plasebo terbalik
   end
 
   def call
@@ -90,9 +94,16 @@ class MomentumBacktestService
   # Simbol yang candle-nya kurang dari lookback+skip dibuang DIAM-DIAM oleh ranking
   # service. Kalau itu terjadi massal (mis. `ensure_data` masih mengunduh saat sweep
   # jalan, 2026-08-10), backtest tetap keluar angka — angka dari universe yang salah.
-  # Gagal keras daripada menghasilkan kesimpulan palsu. Ambang 10%: kondisi normal
-  # ~1% (IPO baru memang belum punya histori).
-  MAX_MISSING_SHARE = 0.10
+  # Gagal keras daripada menghasilkan kesimpulan palsu.
+  #
+  # Ambang diperketat 0,10 -> 0,02 (2026-09-16). Ambang 10% lama TIDAK menyala pada
+  # run backtest 2026-08-26 yang memberi -6,78% untuk 365d/buffer-15, sementara run
+  # berikutnya dengan parameter identik memberi +1,44%: selisih 8,2 poin persentase
+  # dari cache candle yang masih tumbuh (517.066 -> 705.717 candle saham, +36%).
+  # Artinya toleransi 10% cukup longgar untuk melewatkan kesalahan sebesar itu.
+  # 2% masih memberi ruang untuk IPO baru (kondisi normal ~1%) tapi menangkap
+  # universe pincang. Lihat docs/backtest-results.md.
+  MAX_MISSING_SHARE = 0.02
 
   def check_coverage!(prices)
     return if prices.empty?
@@ -117,7 +128,7 @@ class MomentumBacktestService
       # tapi ukuran posisi tetap 1/top_n → skalakan portofolio supaya syaratnya identik
       # dengan jalur tanpa buffer (kalau tidak, buffer diam-diam melonggarkan filter).
       portfolio_idr: MomentumRankingService::PORTFOLIO_IDR * n / @top_n.to_f,
-      residual: @residual
+      residual: @residual, min_flow_ratio: @min_flow_ratio, max_flow_ratio: @max_flow_ratio
     ).call.map { |r| r[:symbol] }
     return ranked.first(@top_n) if @buffer_n.zero?
 
@@ -181,11 +192,56 @@ class MomentumBacktestService
     end
   end
 
-  # Reuse fetch backtester per-trade: histori 1d dalam + ^JKSE (regime/kalender).
+  # Histori 1d dalam untuk tiap simbol + ^JKSE (regime & kalender rebalance).
+  # Dulu meminjam BacktestService (dihapus bersama strategi per-trade); kini
+  # dua metode fetch itu tinggal di sini, satu-satunya pemakainya.
   def ensure_data
-    bt = BacktestService.new(symbols: @symbols, days: @days, offset_days: @offset,
-                             strategies: [], regime_gate: true)
-    @symbols.each { |s| bt.send(:ensure_tf, s, "1d", bt.send(:yahoo_range, cap_years: 5)) }
-    bt.send(:ensure_index_history)
+    range = yahoo_range(cap_years: 5)
+    @symbols.each { |s| ensure_tf(s, "1d", range) }
+    ensure_index_history
+  end
+
+  # Rentang Yahoo ("2y"/"5y") yang cukup menutup window + offset, dibatasi cap_years.
+  def yahoo_range(cap_years:)
+    years = ((@days + @offset) / 365.0).ceil + 1
+    "#{[ years, cap_years ].min}y"
+  end
+
+  def ensure_tf(symbol, timeframe, range)
+    need_from = Time.current - (@days + @offset + @lookback + @skip + 30).days
+    earliest  = Candle.for_asset("stock").for_symbol(symbol).for_timeframe(timeframe).minimum(:opened_at)
+    return if earliest && earliest <= need_from
+
+    rows = YahooFinanceClient.new.klines(symbol: symbol, interval: timeframe, limit: 5000, range: range)
+    return if rows.blank?
+    upsert_candles(symbol, timeframe, "stock", rows)
+  rescue => e
+    Rails.logger.warn("[MomentumBacktestService] fetch #{symbol}/#{timeframe}: #{e.message}")
+  end
+
+  def ensure_index_history
+    sym       = CALENDAR_SYM
+    need_from = Time.current - (@days + @offset + 90).days
+    earliest  = Candle.where(asset_type: "index", symbol: sym, timeframe: "1d").minimum(:opened_at)
+    return if earliest && earliest <= need_from
+
+    rows = YahooFinanceClient.new.klines(symbol: sym, interval: "1d", limit: 5000,
+                                         range: yahoo_range(cap_years: 5))
+    return if rows.blank?
+    upsert_candles(sym, "1d", "index", rows)
+  rescue => e
+    Rails.logger.warn("[MomentumBacktestService] fetch index: #{e.message}")
+  end
+
+  def upsert_candles(symbol, timeframe, asset_type, rows)
+    records = rows.map do |k|
+      {
+        symbol: symbol, timeframe: timeframe, asset_type: asset_type,
+        open: k[:open], high: k[:high], low: k[:low], close: k[:close], volume: k[:volume],
+        opened_at: k[:opened_at], created_at: Time.current, updated_at: Time.current
+      }
+    end
+    Candle.upsert_all(records, unique_by: [ :symbol, :timeframe, :opened_at ],
+                               update_only: [ :open, :high, :low, :close, :volume, :asset_type ])
   end
 end

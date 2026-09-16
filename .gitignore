@@ -63,3 +63,5 @@ supabase_config.txt
 # Dokumen kerja internal — bukan bagian portofolio publik
 /docs/idx-screener-deploy-plan.md
 /docs/superpowers/
+
+ruvector.db

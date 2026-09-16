@@ -281,4 +281,28 @@ class MomentumRankingServiceTest < ActiveSupport::TestCase
       assert_empty MomentumRankingService.new(symbols: %w[SHORT.JK], **opts).call
     end
   end
+
+  # Skor = persentil momentum di antara SELURUH kandidat layak, bukan di antara
+  # top-N. Kalau penyebutnya top-N, skor 100..91 akan muncul tiap hari tanpa peduli
+  # seberapa kuat kandidatnya — angka yang selalu tinggi tidak memberi informasi.
+  test "with_scores memberi 100 ke teratas dan 0 ke terbawah" do
+    svc  = MomentumRankingService.new(symbols: [])
+    rows = [ { momentum: 0.5 }, { momentum: 0.3 }, { momentum: 0.1 }, { momentum: -0.2 }, { momentum: -0.4 } ]
+
+    scored = svc.send(:with_scores, rows)
+
+    assert_equal [ 100, 75, 50, 25, 0 ], scored.map { |r| r[:score] }
+    assert_equal 5, svc.eligible_count
+  end
+
+  test "with_scores dengan satu kandidat memberi 100, bukan pembagian nol" do
+    svc = MomentumRankingService.new(symbols: [])
+    assert_equal [ 100 ], svc.send(:with_scores, [ { momentum: 0.1 } ]).map { |r| r[:score] }
+  end
+
+  test "with_scores kosong tidak meledak" do
+    svc = MomentumRankingService.new(symbols: [])
+    assert_equal [], svc.send(:with_scores, [])
+    assert_equal 0, svc.eligible_count
+  end
 end

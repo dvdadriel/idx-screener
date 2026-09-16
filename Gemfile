@@ -68,3 +68,6 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
 end
+
+# csv keluar dari default gems mulai Ruby 3.4 — dipakai IdxForeignFlowService.
+gem "csv"

@@ -40,7 +40,8 @@ class StockPollerJob < ApplicationJob
     end
 
     Rails.logger.info("[StockPollerJob] Done. Success: #{success}, Failed: #{failed}")
-    SignalEvaluatorJob.perform_later(asset_type: "stock")
+    # Dulu memicu SignalEvaluatorJob (confluence + squeeze). Keduanya dihapus —
+    # jalur sinyal kini hanya momentum (rantai idx:daily_close, harian pasca-tutup).
   end
 
   private

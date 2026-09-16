@@ -30,14 +30,14 @@ class MomentumWeeklyReportJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "sends reconciliation message with paper vs IHSG and negative control" do
+  test "sends reconciliation message with paper vs IHSG and retired-strategy note" do
     seed_week
     stub_notifier do |sent|
       MomentumWeeklyReportJob.perform_now
       assert_equal 1, sent.size
       msg = sent.first
       assert_includes msg, "Rekonsiliasi Mingguan Momentum"
-      assert_includes msg, "Kontrol negatif"
+      assert_includes msg, "Strategi pensiun"
       assert_includes msg, "AAA"
     end
   end

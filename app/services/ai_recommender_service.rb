@@ -47,7 +47,7 @@ class AiRecommenderService
       {
         id:             s.id,
         symbol:         s.symbol,
-        setup:          SetupLabeler.label(s),
+        setup:          s.strategy,
         score:          s.score,
         tradingview:    @tv[s.symbol],
         news_sentiment: meta["news_sentiment"],

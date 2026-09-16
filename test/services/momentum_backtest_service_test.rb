@@ -107,20 +107,26 @@ class MomentumBacktestServiceTest < ActiveSupport::TestCase
     assert_nothing_raised { svc.send(:check_coverage!, {}) }
   end
 
-  test "check_coverage!: tepat di batas 10% masih lolos" do
+  test "check_coverage!: tepat di batas 2% masih lolos" do
     svc = coverage_svc
-    # 1 dari 10 = 0.10, dan guardnya `share <= MAX_MISSING_SHARE`
-    assert_nothing_raised { svc.send(:check_coverage!, prices_with(svc, total: 10, missing: 1)) }
+    # 1 dari 50 = 0.02, dan guardnya `share <= MAX_MISSING_SHARE`
+    assert_nothing_raised { svc.send(:check_coverage!, prices_with(svc, total: 50, missing: 1)) }
   end
 
-  test "check_coverage!: di atas 10% raise dan menyebut angkanya" do
+  test "check_coverage!: di atas 2% raise dan menyebut angkanya" do
     svc = coverage_svc
     err = assert_raises(RuntimeError) do
-      svc.send(:check_coverage!, prices_with(svc, total: 10, missing: 2))
+      svc.send(:check_coverage!, prices_with(svc, total: 50, missing: 2))
     end
     assert_match(/Data tak lengkap/, err.message)
-    assert_match(/2\/10/, err.message)
-    assert_match(/20\.0%/, err.message)
+    assert_match(/2\/50/, err.message)
+    assert_match(/4\.0%/, err.message)
+  end
+
+  # Regresi ambang: 10% data hilang DULU lolos diam-diam. Sekarang harus gagal keras.
+  test "check_coverage!: 10% hilang — yang dulu lolos — kini raise" do
+    svc = coverage_svc
+    assert_raises(RuntimeError) { svc.send(:check_coverage!, prices_with(svc, total: 10, missing: 1)) }
   end
 
   test "check_coverage!: nil dihitung sebagai simbol yang kurang datanya" do
@@ -140,9 +146,9 @@ class MomentumBacktestServiceTest < ActiveSupport::TestCase
   # MAX_MISSING_SHARE = 0.10 terbukti TERLALU LONGGAR di lapangan: pada
   # 2026-08-26, backtest 365d/buffer-15 memberi -6,78% dengan cache candle
   # dingin lalu +1,44% setelah hangat — selisih 8,2 poin persentase — dan guard
-  # ini tidak menyala. Test ini memaku nilai ambangnya supaya perubahannya
-  # menjadi keputusan yang disengaja, bukan pergeseran diam-diam.
-  test "MAX_MISSING_SHARE terpaku pada 0.10" do
-    assert_in_delta 0.10, MomentumBacktestService::MAX_MISSING_SHARE, 1e-9
+  # ini tidak menyala. Diperketat ke 0,02 pada 2026-09-16. Test ini memaku nilai
+  # ambangnya supaya perubahannya jadi keputusan sadar, bukan pergeseran diam-diam.
+  test "MAX_MISSING_SHARE terpaku pada 0.02" do
+    assert_in_delta 0.02, MomentumBacktestService::MAX_MISSING_SHARE, 1e-9
   end
 end

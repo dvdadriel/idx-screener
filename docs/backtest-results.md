@@ -152,3 +152,166 @@ Yang **tidak** bisa dikatakan: bahwa sistem ini menghasilkan uang. Bukti yang be
 Tindakan berikutnya yang jelas dari data ini, berurutan: **matikan `CONFLUENCE_BULLISH`**, **perbaiki atau hapus `CONFLUENCE_BEARISH`**, **perketat `MAX_MISSING_SHARE`**, dan **perbaiki perhitungan max drawdown**. Baru setelah itu angka agregatnya layak dibaca lagi.
 
 Strategi tetap dalam observasi. Tidak ada uang sungguhan yang pernah dipertaruhkan di sini, dan berdasarkan data di atas, itu keputusan yang benar.
+
+---
+
+# Pembaruan 2026-09-16 — pembersihan strategi, perbaikan metrik, uji smart money
+
+## 1. Strategi yang dihapus
+
+Berdasarkan angka di dokumen ini, empat jalur sinyal dihapus dari kode (bukan
+di-mute — dihapus):
+
+| Dihapus | Alasan |
+|---|---|
+| `SignalConfluenceService` | sumber 89% kerugian paper; rugi out-of-sample |
+| `SqueezeBreakoutService` | WR 18,5%, avg −1,03% |
+| `IdxScannerService` (SWING_PICK) | n=270, WR 40%, avg −0,38% |
+| `BacktestService` (per-trade) | tak ada lagi strategi per-trade untuk diuji |
+
+Ikut terhapus: `SignalEvaluatorJob`, `SetupLabeler`, `lib/tasks/backtest.rake`,
+dan test terkait. `IdxScannerJob` DIPERTAHANKAN tapi disusutkan menjadi pengambil
+candle 1d — momentum bergantung padanya (StockPollerJob hanya jalan saat bursa buka).
+
+Jalur sinyal yang tersisa: **momentum + gate regime IHSG**. Tidak ada yang lain.
+
+## 2. Max drawdown — salah dua kali sebelum benar
+
+Dashboard menampilkan `Max Drawdown -4152,12%`. Perbaikannya butuh dua iterasi,
+dan iterasi pertama layak dicatat karena terlihat benar padahal tidak:
+
+| Versi | Rumus | Hasil (saham) | Masalah |
+|---|---|---|---|
+| v1 (lama) | `cum += pnl_pct` | **−4152,12%** | penjumlahan aritmetik, tak berbatas |
+| v2 | equity berurutan per trade | **−100,00%** | 13.041 trade di-compound seolah antre |
+| v3 (sekarang) | kurva ekuitas **harian** | **−7,52%** | — |
+
+v2 gagal karena datanya punya **13.041 trade tutup dalam 61 hari bursa (~214 per
+hari)** — posisinya paralel, bukan antre. Meng-compound avg −0,28%/trade sebanyak
+13.041 kali memberi equity ≈ 0, jadi drawdown selalu mentok 100%: rumus benar,
+pertanyaan salah. v3 merata-ratakan trade yang tutup di hari yang sama (proxy
+portofolio equal-weight) lalu meng-compound antar hari.
+
+Angka setelah perbaikan: **saham −7,52%**, **crypto −11,06%**.
+
+Test juga menemukan bug nyata sepanjang jalan: trade closed bisa punya `pnl_pct`
+tapi `exit_at` nil, yang membuat pengelompokan harian meledak. Baris seperti itu
+kini dibuang dari kurva (bukan dipaksa ke satu bucket palsu).
+
+## 3. MAX_MISSING_SHARE 0,10 → 0,02
+
+Guard cakupan data diperketat, dan **langsung menemukan sesuatu**: pada universe
+EXTENDED, 9 dari 223 simbol (4,0%) tidak punya histori candle sama sekali —
+WSKT, SCBD, RMBA, MFIN, COWL, GAMA, LCGP, ENVY, SKYB, semuanya saham
+suspend/delisting. Ambang 10% lama meloloskan ini tanpa suara.
+
+Simbol-simbol itu dikeluarkan dari universe uji **secara sadar dan dilaporkan**,
+bukan dengan melonggarkan kembali ambangnya.
+
+## 4. Aliran dana asing (smart money) — pipeline jadi, hipotesis GAGAL
+
+### Data berhasil ditarik
+
+Tabel `foreign_flows` (terpisah penuh dari `Candle`, sengaja: satu sumber rusak
+tak boleh menjatuhkan keduanya).
+
+```
+312.589 baris · 979 simbol · 326 hari bursa · 2025-05-05 .. 2026-09-15
+```
+
+Sumber: endpoint `TradingSummary/GetStockSummary` milik IDX.
+
+**Catatan akses:** `curl` mendapat HTTP 403 Cloudflare dari SEMUA endpoint
+idx.co.id, dengan header browser selengkap apa pun. `Net::HTTP` Ruby tembus tanpa
+masalah — Cloudflare memfilter fingerprint TLS, bukan header. Jadi jangan
+menyimpulkan "IDX memblokir kita" dari hasil `curl`. Tersedia juga jalur berkas
+(`idx:foreign_flow_ingest`) kalau suatu saat akses jaringan tertutup.
+
+### Bug satuan yang nyaris lolos
+
+`ForeignBuy` / `ForeignSell` IDX bersatuan **LEMBAR SAHAM**, bukan rupiah.
+Contoh (BBCA, 2026-09-15): `ForeignBuy` 65.949.600 sementara `Value` hari itu
+Rp 614.491.297.500 dan `Volume` 95.608.200 lembar.
+
+Versi pertama membagi lembar dengan rupiah. Hasilnya rasio ~0,000 untuk **semua**
+saham — angka yang kelihatan "kecil tapi masuk akal" dan hampir diterima sebagai
+sinyal lemah. Ketahuan hanya karena dicek manual terhadap BBCA. Metrik kini
+lembar-dibagi-lembar: `Σ net lembar asing / Σ volume`, tanpa asumsi harga.
+Ada regression test yang memakukan angka BBCA itu.
+
+### Hasil uji hipotesis
+
+Universe 214 simbol (EXTENDED, sudah disaring cakupan candle & flow), 365 hari,
+rebalance bulanan, fee 0,4%:
+
+| Varian | Return | Alpha vs IHSG | Max DD | Sharpe |
+|---|---|---|---|---|
+| momentum polos | −3,98% | +16,31% | 11,85% | −0,03 |
+| flow ≥ 0 (asing net beli) | +4,31% | +24,60% | 8,00% | 0,84 |
+| flow ≥ 0,02 | +5,81% | +26,10% | 4,39% | 1,27 |
+| flow ≥ 0,05 | +11,01% | +31,30% | 2,64% | 2,14 |
+
+Baris pertama **persis mereproduksi** angka 365d/buffer-off di tabel walk-forward
+di atas (−3,98% / +16,31% / 11,85% / −0,03) — konfirmasi bahwa baseline-nya sama.
+
+Monoton membaik di keempat ambang. Terlihat meyakinkan. Ternyata tidak.
+
+### Tiga kontrol yang membatalkannya
+
+**a. Plasebo terbalik — sebagian lolos, sebagian tidak**
+
+| Varian | Return | Alpha |
+|---|---|---|
+| asing NET JUAL (flow ≤ 0) | **−12,16%** | +8,13% |
+| asing jual kuat (flow ≤ −0,05) | **+3,82%** | +24,11% |
+
+Arah dasarnya benar (net jual lebih buruk dari polos). Tapi "jual kuat" justru
+**mengalahkan** momentum polos — padahal hipotesisnya memprediksi sebaliknya.
+
+**b. Konsentrasi — bukan penyebabnya**
+
+Filter paling ketat masih meloloskan 22–40 nama per tanggal rebalance, jauh di
+atas top-10 yang dibeli. Jadi hasilnya bukan artefak portofolio yang menciut.
+
+**c. Uji permutasi — ini yang menentukan**
+
+25 subset **acak** berukuran sama (~105 dari 214 simbol), tanpa informasi aliran
+dana sama sekali:
+
+```
+acak:    median -2,77%   rata2 -1,28%
+         p10 -10,55%     p90 +10,72%
+         min -15,55%     maks +17,74%
+flow>=0: +4,31%
+
+subset acak yang mengalahkan filter flow: 8 dari 25
+p-value empiris: ~0,32
+```
+
+**+4,31% jatuh di dalam sebaran acak, bahkan tidak di kuartil teratas.** Sepertiga
+subset acak melakukannya lebih baik tanpa tahu apa pun tentang asing.
+
+### Kesimpulan
+
+Hipotesis **tidak terkonfirmasi**. Yang sebenarnya ditunjukkan tabel pertama
+bukan "aliran dana asing punya edge", melainkan **satu jendela 365 hari tidak
+mampu membedakan sinyal dari keberuntungan** — sebaran acaknya selebar 33 poin
+persentase (−15,55% s/d +17,74%). Setiap filter apa pun akan menghasilkan angka
+di dalam rentang itu, dan monotonisitas antar-ambang tidak menyelamatkannya
+karena keempat ambang menguji jendela yang sama.
+
+Ini pelajaran yang sama dengan sensitivitas buffer 15→20 di bagian atas dokumen,
+hanya dengan alat ukur yang lebih tajam.
+
+**Overlay smart money tetap MATI secara default** (`min_flow_ratio: nil`).
+Kodenya ada, teruji, dan datanya mengalir harian — tapi ia tidak akan menyentuh
+keputusan apa pun sampai ada bukti yang lolos kontrol acak.
+
+### Apa yang dibutuhkan untuk menguji ulang dengan benar
+
+1. **Riwayat lebih panjang.** 326 hari bursa hanya cukup untuk satu jendela.
+   Ingest harian sudah dijadwalkan (`idx:foreign_flow_daily`, 16:45 WIB); dalam
+   ~1 tahun lagi ada cukup data untuk walk-forward yang sesungguhnya.
+2. **Beberapa jendela terpisah**, bukan satu jendela dengan empat ambang.
+3. **Uji permutasi sebagai syarat lulus**, bukan sebagai pemeriksaan tambahan —
+   aturannya: p < 0,05 terhadap subset acak berukuran sama, atau hipotesis ditolak.

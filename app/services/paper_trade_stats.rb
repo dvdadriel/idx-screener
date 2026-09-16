@@ -30,8 +30,11 @@ class PaperTradeStats
     avg_loser    = closed.losers.average(:pnl_pct)&.to_f&.round(2) || 0.0
 
     # Risk metrics — per-trade pnl_pct, urut waktu exit untuk equity curve.
-    pnls = closed.where.not(pnl_pct: nil).order(:exit_at).pluck(:pnl_pct).map(&:to_f)
-    risk = RiskMetrics.compute(pnls)
+    # Ambil exit_at juga: drawdown dihitung dari kurva ekuitas HARIAN, bukan
+    # per-trade berurutan — posisi paper berjalan paralel (~200 trade tutup/hari).
+    rows  = closed.where.not(pnl_pct: nil).order(:exit_at).pluck(:pnl_pct, :exit_at)
+    pnls  = rows.map { |p, _| p.to_f }
+    risk  = RiskMetrics.compute(pnls, dates: rows.map { |_, d| d })
 
     by_strategy  = closed.group(:strategy).pluck(
       :strategy,

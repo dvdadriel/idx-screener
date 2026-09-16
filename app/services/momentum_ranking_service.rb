@@ -9,7 +9,7 @@ class MomentumRankingService
   LOOKBACK      = 126   # ~6 bulan bursa
   SKIP          = 21    # ~1 bulan (lewati agar tak kena reversal jangka pendek)
   TOP_N         = 10
-  MIN_LIQUIDITY = IdxScannerService::MIN_LIQUIDITY   # Rp 1M avg turnover
+  MIN_LIQUIDITY = 1_000_000_000   # Rp 1 miliar avg turnover harian (pindah dari IdxScannerService yang dihapus)
   # Filter anti-gorengan (tervalidasi backtest: DD turun ~2/3, Sharpe naik, alpha membaik):
   MAX_MOMENTUM  = 1.0   # buang pump parabolik >100%/6bln (return rapuh, rawan crash)
   MIN_PRICE     = 100   # buang saham receh < Rp 100 (rawan manipulasi)
@@ -17,6 +17,7 @@ class MomentumRankingService
   # lebih dari itu, entry/exit ritel akan menggerakkan harga (slippage tak terkendali).
   PORTFOLIO_IDR      = ENV.fetch("PORTFOLIO_IDR", 100_000_000).to_f   # nilai portofolio acuan
   MAX_TURNOVER_SHARE = 0.05
+  FLOW_WINDOW        = 20    # hari bursa untuk rasio aliran dana asing
 
   # Filter kualitas (tervalidasi backtest sebelum jadi default):
   #   max_momentum:  buang pump parabolik (>100%/6bln = pump, bukan momentum)
@@ -26,9 +27,14 @@ class MomentumRankingService
   #                  Default OFF sampai backtest membuktikan membaik (plan #5).
   # ignore_regime: hitung ranking WALAU risk-off — HANYA untuk melihat (watchlist),
   # BUKAN sinyal beli. Regime tetap gate saat aksi nyata (snapshot/paper/live).
+  # min_flow_ratio: overlay SMART MONEY (hipotesis, default OFF sampai terbukti).
+  #   Buang kandidat yang net beli asing 20 hari / turnover 20 hari-nya di bawah
+  #   ambang ini. 0.0 = "asing net beli". nil = filter mati.
+  #   Saham yang datanya BELUM ADA (rasio nil) TIDAK dibuang — lihat #passes_flow?.
   def initialize(as_of: nil, symbols: nil, lookback: LOOKBACK, skip: SKIP, top_n: TOP_N,
                  max_momentum: MAX_MOMENTUM, min_price: MIN_PRICE, max_extension: nil,
-                 portfolio_idr: PORTFOLIO_IDR, ignore_regime: false, residual: false)
+                 portfolio_idr: PORTFOLIO_IDR, ignore_regime: false, residual: false,
+                 min_flow_ratio: nil, max_flow_ratio: nil, flow_window: FLOW_WINDOW)
     @as_of         = as_of
     @symbols       = symbols
     @lookback      = lookback
@@ -40,6 +46,9 @@ class MomentumRankingService
     @portfolio_idr = portfolio_idr.to_f
     @ignore_regime = ignore_regime
     @residual      = residual
+    @min_flow_ratio = min_flow_ratio
+    @max_flow_ratio = max_flow_ratio   # plasebo: pertahankan yang asing NET JUAL
+    @flow_window    = flow_window
   end
 
   def universe
@@ -51,9 +60,54 @@ class MomentumRankingService
   def call
     return [] if !@ignore_regime && IdxMarketState.long_blocked?
 
-    universe.filter_map { |sym| score(sym) }
-            .sort_by { |r| -r[:momentum] }
-            .first(@top_n)
+    eligible = universe.filter_map { |sym| score(sym) }
+                       .select { |r| passes_flow?(r[:symbol]) }
+                       .sort_by { |r| -r[:momentum] }
+
+    with_scores(eligible).first(@top_n)
+  end
+
+  # Jumlah kandidat yang LOLOS seluruh filter kelayakan (likuiditas, harga minimum,
+  # anti-pump, feasibility posisi). Penyebut skor persentil — dipakai laporan harian
+  # supaya "skor 96" bisa dibaca sebagai "96 dari sekian saham", bukan angka gaib.
+  def eligible_count = @eligible_count.to_i
+
+  # Skor 0-100 = PERSENTIL momentum di antara kandidat layak. Bukan model, bukan
+  # prediksi, bukan probabilitas: ia hanya menyatakan ulang peringkat dalam skala
+  # yang bisa dibaca ("96" = mengungguli 96% kandidat layak hari itu).
+  #
+  # Sengaja TIDAK memasukkan aliran dana asing sebagai bobot. Overlay itu gagal uji
+  # permutasi (p ~ 0,32, lihat docs/backtest-results.md); menjadikannya komponen skor
+  # akan menyelundupkan sinyal tak tervalidasi ke dalam angka yang terlihat resmi.
+  # Ia ditampilkan sebagai INFORMASI di laporan, bukan sebagai bagian skor.
+  def with_scores(eligible)
+    @eligible_count = eligible.size
+    n = eligible.size
+    return eligible if n.zero?
+
+    eligible.each_with_index.map do |row, i|
+      # i=0 (terbaik) -> 100 ; i=n-1 (terburuk) -> 0 saat n>1
+      pct = n == 1 ? 100 : ((n - 1 - i).to_f / (n - 1) * 100).round
+      row.merge(score: pct, rank_of: n)
+    end
+  end
+
+  # Overlay smart money. Mati (nil) = semua lolos, persis perilaku sebelumnya.
+  #
+  # Rasio nil (data asing belum ada untuk simbol itu) LOLOS, tidak dibuang. Kalau
+  # nil dianggap gagal, filter berubah diam-diam menjadi "hanya saham yang kebetulan
+  # sudah di-ingest" — dan backtest-nya akan mengukur cakupan data, bukan hipotesis.
+  def passes_flow?(symbol)
+    return true if @min_flow_ratio.nil? && @max_flow_ratio.nil?
+    r = flow_ratios[symbol]
+    return true if r.nil?
+    return false if @min_flow_ratio && r < @min_flow_ratio
+    return false if @max_flow_ratio && r > @max_flow_ratio
+    true
+  end
+
+  def flow_ratios
+    @flow_ratios ||= IdxForeignFlowService.flow_ratios(universe, as_of: @as_of, window: @flow_window)
   end
 
   private

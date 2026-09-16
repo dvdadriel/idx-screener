@@ -23,15 +23,12 @@ class DeepAnalysisService
     valid_tf = per_tf.values.any? { |v| v[:has_data] }
     return error("No data available for #{sym}") unless valid_tf
 
-    confluence = SignalConfluenceService.new(symbol: sym, asset_type: asset_type).evaluate
-
     result = {
       symbol:        sym,
       display:       display_name(sym, asset_type),
       asset_type:    asset_type,
       timeframes:    per_tf,
-      confluence:    confluence,
-      recommendation: build_recommendation(per_tf, confluence, asset_type),
+      recommendation: build_recommendation(per_tf, asset_type),
       recent_signals: recent_signals(sym),
       paper_trades:  paper_trade_history(sym),
       analyzed_at:   Time.current
@@ -180,23 +177,11 @@ class DeepAnalysisService
     end
   end
 
-  def build_recommendation(per_tf, confluence, asset_type)
-    if confluence
-      meta = confluence[:metadata]
-      return {
-        verdict:    confluence[:signal_type],
-        confidence: "HIGH",
-        score:      (confluence[:score] * 100).round,
-        reason:     "Confluence #{meta[:confluence]} indicators aligned, trend #{meta[:trend]}",
-        entry:      meta[:entry_price],
-        sl:         meta[:sl_price],
-        tp:         meta[:tp_price],
-        sl_pct:     meta[:sl_pct],
-        tp_pct:     meta[:tp_pct],
-        risk_reward: meta[:risk_reward]
-      }
-    end
-
+  # Agregasi manual lintas timeframe. Jalur "confluence" (skor gabungan indikator)
+  # dihapus: terbukti rugi out-of-sample, jadi verdict HIGH-confidence darinya
+  # justru menyesatkan. Yang tersisa adalah ringkasan deskriptif — WATCH, bukan
+  # perintah beli. Keputusan beli ada di jalur momentum, bukan di sini.
+  def build_recommendation(per_tf, asset_type)
     # Manual aggregation: count BUY/SELL signals across timeframes
     signals = per_tf.values.flat_map do |v|
       [ v[:rsi_signal]&.dig(:dir), v[:macd_signal]&.dig(:dir) ]
@@ -210,9 +195,9 @@ class DeepAnalysisService
     elsif sells >= 3 && buys == 0
       { verdict: "SELL", confidence: "MEDIUM", reason: "#{sells} indicators bearish, no bullish" }
     elsif buys > sells
-      { verdict: "WATCH-BUY", confidence: "LOW", reason: "#{buys} bullish vs #{sells} bearish — wait for confluence" }
+      { verdict: "WATCH-BUY", confidence: "LOW", reason: "#{buys} bullish vs #{sells} bearish — belum meyakinkan" }
     elsif sells > buys
-      { verdict: "WATCH-SELL", confidence: "LOW", reason: "#{sells} bearish vs #{buys} bullish — wait for confluence" }
+      { verdict: "WATCH-SELL", confidence: "LOW", reason: "#{sells} bearish vs #{buys} bullish — belum meyakinkan" }
     else
       { verdict: "HOLD", confidence: "LOW", reason: "Mixed signals, no clear direction" }
     end
@@ -222,7 +207,6 @@ class DeepAnalysisService
   # nil (page still renders) when the LLM isn't configured or fails.
   def build_narrative(result)
     rec  = result[:recommendation] || {}
-    conf = result[:confluence]
     summary = {
       symbol:     result[:display],
       verdict:    rec[:verdict],
@@ -230,7 +214,6 @@ class DeepAnalysisService
       score:      rec[:score],
       reason:     rec[:reason],
       entry:      rec[:entry], sl: rec[:sl], tp: rec[:tp],
-      confluence: conf && conf[:metadata]&.slice(:trend, :confluence, :atr_pct),
       per_tf:     result[:timeframes].filter_map { |tf, v|
         next unless v[:has_data]
         [ tf, { rsi: v[:rsi], rsi_signal: v[:rsi_signal]&.dig(:dir),

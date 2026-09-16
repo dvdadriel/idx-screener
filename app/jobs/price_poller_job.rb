@@ -27,7 +27,7 @@ class PricePollerJob < ApplicationJob
     end
 
     Rails.logger.info("[PricePollerJob #{timeframe}] Done. Success: #{success}, Failed: #{failed}")
-    SignalEvaluatorJob.perform_later(asset_type: "crypto")
+    # SignalEvaluatorJob dihapus bersama confluence/squeeze — crypto kini hanya polling candle.
   end
 
   private

@@ -12,9 +12,7 @@ name: Scheduled jobs
 on:
   schedule:
     - cron: '0 22 * * *'    # universe_refresh   — 05:00 WIB
-    - cron: '30 9 * * 1-5'  # scanner            — 16:30 WIB
-    - cron: '0 10 * * 1-5'  # snapshot           — 17:00 WIB
-    - cron: '15 10 * * 1-5' # rank_report        — 17:15 WIB
+    - cron: '30 9 * * 1-5'  # daily_close (candle -> asing -> snapshot -> laporan)
     - cron: '0 10 * * *'    # daily_summary      — 17:00 WIB
     - cron: '45 11 * * *'   # evidence_backup    — 18:45 WIB
     - cron: '15 3 * * *'    # candle_prune       — 10:15 WIB
@@ -36,7 +34,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45   # daily_close merantai 4 langkah; scanner sendiri ~10 menit
     env:
       RAILS_ENV: production
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -55,17 +53,28 @@ jobs:
         if: github.event.schedule == '0 22 * * *' || inputs.task == 'universe_refresh'
         run: bundle exec rake idx:universe_refresh
 
+      # Rantai berurutan — cron GitHub telat 5-6 jam dan tak menjamin urutan,
+      # jadi candle/asing/snapshot/laporan dijalankan dalam satu proses.
+      - name: daily_close
+        if: github.event.schedule == '30 9 * * 1-5' || inputs.task == 'daily_close'
+        run: bundle exec rake idx:daily_close
+
+      # Langkah individual tetap tersedia untuk workflow_dispatch manual.
       - name: scanner
-        if: github.event.schedule == '30 9 * * 1-5' || inputs.task == 'scanner'
+        if: inputs.task == 'scanner'
         run: bundle exec rake idx:scanner
 
-      - name: snapshot
-        if: github.event.schedule == '0 10 * * 1-5' || inputs.task == 'snapshot'
-        run: bundle exec rake idx:snapshot
+      - name: foreign_flow_daily
+        if: inputs.task == 'foreign_flow_daily'
+        run: bundle exec rake idx:foreign_flow_daily
 
-      - name: rank_report
-        if: github.event.schedule == '15 10 * * 1-5' || inputs.task == 'rank_report'
-        run: bundle exec rake idx:rank_report
+      - name: daily_picks
+        if: inputs.task == 'daily_picks'
+        run: bundle exec rake idx:daily_picks
+
+      - name: snapshot
+        if: inputs.task == 'snapshot'
+        run: bundle exec rake idx:snapshot
 
       - name: daily_summary
         if: github.event.schedule == '0 10 * * *' || inputs.task == 'daily_summary'

@@ -41,9 +41,9 @@
 #
 # stock_poller            → idx:poll                (*/30 * * * *)
 # idx_universe_refresh    → idx:universe_refresh     (0 22 * * *)
-# idx_scanner             → idx:scanner              (30 9 * * 1-5)
-# momentum_snapshot       → idx:snapshot             (0 10 * * 1-5)
-# rank_report             → idx:rank_report          (15 10 * * 1-5)
+# idx_scanner             → idx:daily_close          (30 9 * * 1-5, berantai)
+# momentum_snapshot       → bagian dari idx:daily_close
+# rank_report             → DIHAPUS, digantikan idx:daily_close (30 9 * * 1-5)
 # momentum_weekly_report  → idx:weekly_report         (30 10 * * 5)
 # paper_trade_updater     → idx:paper_trade_update   (*/5 * * * *)
 # daily_summary           → idx:daily_summary         (0 10 * * *)

@@ -61,16 +61,19 @@ class MomentumWeeklyReportJob < ApplicationJob
 
   def check(ok) = ok ? "✅" : "❌"
 
-  # Kontrol negatif: confluence (dibungkam, terbukti rugi di backtest). Kalau ia
-  # tiba-tiba profit forward, metodologi kita yang salah — bukan kabar baik.
+  # Kontrol negatif: strategi lama (confluence/squeeze/swing) yang sudah DIHAPUS.
+  # Angkanya beku — tak ada trade baru — jadi ini catatan sejarah, bukan kontrol
+  # yang hidup. Tetap ditampilkan supaya alasan penghapusannya tak terlupakan.
+  RETIRED_STRATEGIES = %w[CONFLUENCE SQUEEZE SWING_PICK].freeze
+
   def negative_control_line
     rows = PaperTradeStats.for("stock")[:by_strategy]
-             .select { |s| s[:strategy].to_s.start_with?("CONFLUENCE") }
-    return "_Kontrol negatif (confluence): belum ada trade tertutup_" if rows.empty?
+             .select { |s| RETIRED_STRATEGIES.any? { |r| s[:strategy].to_s.start_with?(r) } }
+    return "_Strategi pensiun: tak ada trade tertutup_" if rows.empty?
 
     total = rows.sum { |s| s[:total] }
     avg   = (rows.sum { |s| s[:avg_pnl] * s[:total] } / total).round(2)
-    "_Kontrol negatif (confluence, muted): n=#{total}, avg #{fmt(avg)} — ekspektasi: negatif_"
+    "_Strategi pensiun (dihapus 2026-09-16): n=#{total}, avg #{fmt(avg)} — beku, arsip_"
   end
 
   def weekly_return(curve)

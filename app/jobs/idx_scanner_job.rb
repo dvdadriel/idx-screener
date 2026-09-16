@@ -1,34 +1,36 @@
+# Fetch candle harian (1d) seluruh universe IDX — fondasi data untuk momentum.
+#
+# Dulu job ini juga men-scan & menerbitkan sinyal SWING_PICK (IdxScannerService).
+# Strategi itu DIHAPUS 2026-09-16: paper trading 270 trade menunjukkan win rate 40%
+# dengan avg -0,38%/trade, dan tak pernah lolos validasi backtest. Yang tersisa —
+# dan satu-satunya alasan job ini masih ada — adalah pengambilan candle-nya:
+# StockPollerJob hanya jalan saat bursa buka, sedangkan momentum butuh histori 1d
+# dalam (lookback 126 + skip 21 bar) yang di-refresh sekali sehari pasca-tutup.
 class IdxScannerJob < ApplicationJob
   queue_as :scan
 
-  TOP_PICKS_LIMIT = 10
+  # Di bawah ini, hasil fetch dianggap tidak layak dipakai (lihat akhir #perform).
+  # 0,9 memberi ruang untuk saham suspend/delisting yang Yahoo memang tak punya —
+  # produksi 2026-09-15 mencatat gagal 2/958 (99,8% cakupan).
+  MIN_COVERAGE = 0.9
 
-  def perform(skip_fetch: false)
-    fetch_daily_candles unless skip_fetch
-
-    picks = IdxScannerService.new.call.first(TOP_PICKS_LIMIT)
-
-    save_picks(picks)
-    send_telegram_picks(picks)
-
-    Rails.logger.info("[IdxScannerJob] Saved #{picks.size} swing picks")
-    picks
-  end
-
-  private
-
-  def fetch_daily_candles
+  def perform
     client = YahooFinanceClient.new
     universe = IdxUniverseService.all
     Rails.logger.info("[IdxScannerJob] Fetching #{universe.size} IDX tickers")
 
     failed = 0
+    fetched = 0
+    rate_limited = nil
+
     catch(:rate_limited) do
       universe.each_with_index do |symbol, i|
         begin
           rows = client.klines(symbol: symbol, interval: "1d", limit: 200)
           upsert(symbol, rows)
+          fetched += 1
         rescue Http::RetryableError => e
+          rate_limited = e.message
           Rails.logger.warn("[IdxScannerJob] aborting fetch (#{e.message})")
           throw :rate_limited
         rescue => e
@@ -42,8 +44,26 @@ class IdxScannerJob < ApplicationJob
       end
     end
 
-    Rails.logger.info("[IdxScannerJob] Fetch complete. Failed: #{failed}/#{universe.size}")
+    coverage = universe.empty? ? 1.0 : fetched.to_f / universe.size
+    Rails.logger.info(
+      "[IdxScannerJob] Fetch complete. Berhasil: #{fetched}/#{universe.size} " \
+      "(#{(coverage * 100).round(1)}%), gagal: #{failed}#{rate_limited ? ', DIHENTIKAN rate limit' : ''}"
+    )
+
+    # Rate limit dulu membatalkan fetch DIAM-DIAM: job tetap melapor "Fetch complete"
+    # dan keluar sukses, jadi rantai harian lanjut membuat laporan di atas candle
+    # kemarin tanpa satu pun alarm. Sekarang cakupan di bawah MIN_COVERAGE = gagal
+    # keras, supaya rantai mencatatnya dan GitHub Actions merah.
+    if coverage < MIN_COVERAGE
+      raise "Fetch candle tak lengkap: #{fetched}/#{universe.size} " \
+            "(#{(coverage * 100).round(1)}%, minimum #{(MIN_COVERAGE * 100).round}%)" \
+            "#{rate_limited ? " — dihentikan rate limit: #{rate_limited}" : ''}"
+    end
+
+    fetched
   end
+
+  private
 
   def upsert(symbol, rows)
     return if rows.empty?
@@ -65,54 +85,5 @@ class IdxScannerJob < ApplicationJob
       unique_by: [ :symbol, :timeframe, :opened_at ],
       update_only: [ :open, :high, :low, :close, :volume, :asset_type ]
     )
-  end
-
-  def save_picks(picks)
-    picks.each_with_index do |p, idx|
-      TradingSignal.create!(
-        symbol:      p[:symbol],
-        signal_type: "BUY",
-        strategy:    "SWING_PICK",
-        score:       p[:composite_score] / 100.0,
-        asset_type:  "stock",
-        fired_at:    Time.current,
-        alerted:     true,   # don't double-send via AlertDispatcherJob
-        metadata: {
-          rank:           idx + 1,
-          rsi:            p[:rsi],
-          macd_hist:      p[:macd_hist],
-          macd_rising:    p[:macd_rising],
-          last_close:     p[:last_close],
-          ma50:           p[:ma50],
-          price_vs_ma50:  p[:price_vs_ma50],
-          volume_ratio:   p[:volume_ratio],
-          breakdown:      p[:breakdown],
-          timeframe:      "1d"
-        }
-      )
-    rescue => e
-      Rails.logger.error("[IdxScannerJob] save #{p[:symbol]}: #{e.message}")
-    end
-  end
-
-  def send_telegram_picks(picks)
-    return if picks.empty?
-
-    notifier = TelegramNotifier.new(asset_type: "stock")
-    return unless notifier.send(:configured?)
-
-    date = Time.current.in_time_zone(IdxMarket::TZ).strftime("%Y-%m-%d")
-    lines = [ "📈 *IDX Swing Picks — #{date}*", "" ]
-
-    picks.each_with_index do |p, idx|
-      sym = p[:symbol].sub(".JK", "")
-      lines << "*#{idx + 1}. #{sym}* — Score *#{p[:composite_score]}*"
-      lines << "  RSI: `#{p[:rsi]}` | MACD hist: `#{p[:macd_hist].round(2)}`#{p[:macd_rising] ? ' ↑' : ''}"
-      lines << "  Price: Rp #{p[:last_close].to_i} (#{p[:price_vs_ma50] > 0 ? '+' : ''}#{p[:price_vs_ma50]}% vs MA50)"
-      lines << "  Vol: #{p[:volume_ratio]}x avg"
-      lines << ""
-    end
-
-    notifier.send(:post_message, lines.join("\n"))
   end
 end
